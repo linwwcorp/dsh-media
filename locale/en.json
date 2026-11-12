@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Streaming media",
+    "description": "A ZLMediaKit-backed streaming media service: configure ports and recording storage, manage streams in a directory tree, watch live video, and replay recordings."
+  }
+}

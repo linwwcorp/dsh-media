@@ -1,0 +1,12 @@
+services:
+  zlmediakit:
+    build: .
+    image: dsh-zlm:local
+    container_name: zlmediakit
+    restart: unless-stopped
+    # RTP/RTSP 随机端口是 30000-35000，用 host 网络才能直接收发
+    network_mode: host
+    volumes:
+      - ./config.ini:/opt/media/conf/config.ini
+      - ./data/snap:/opt/media/bin/www/snap
+      - ./data/ffmpeg:/opt/media/bin/ffmpeg
