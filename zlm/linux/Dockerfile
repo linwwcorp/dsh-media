@@ -19,14 +19,20 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL -o /usr/local/lib/libjemalloc.so.2 \
-        "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/libjemalloc.so.2" && \
-    ldconfig
-
 WORKDIR /opt/media/bin
-RUN curl -fsSL -o /opt/media/bin/MediaServer \
-        "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/MediaServer" && \
-    chmod +x /opt/media/bin/MediaServer
+COPY . /tmp/zlm-linux/
+RUN if [ -s /tmp/zlm-linux/MediaServer ] && [ -s /tmp/zlm-linux/libjemalloc.so.2 ]; then \
+      cp /tmp/zlm-linux/libjemalloc.so.2 /usr/local/lib/libjemalloc.so.2 && \
+      cp /tmp/zlm-linux/MediaServer /opt/media/bin/MediaServer; \
+    else \
+      curl -fsSL -o /usr/local/lib/libjemalloc.so.2 \
+        "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/libjemalloc.so.2" && \
+      curl -fsSL -o /opt/media/bin/MediaServer \
+        "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/MediaServer"; \
+    fi && \
+    chmod +x /opt/media/bin/MediaServer && \
+    ldconfig && \
+    rm -rf /tmp/zlm-linux
 COPY default.pem ./
 COPY www ./www
 COPY config.ini /opt/media/conf/config.ini

@@ -32,13 +32,22 @@ dsh plugin install https://github.com/linwwcorp/dsh-media
 
 `plugin_manager` 的 `install_bundle` 同样把 `target` 设为 `https://github.com/linwwcorp/dsh-media`。
 
-没有外网、或要装手头这份目录时，再用本地路径：
+没有外网、或要装手头这份目录时，再用本地路径。安装前先把两个运行文件下载到插件目录的 `zlm/linux/`，文件名不要改：
+
+```sh
+cd /path/to/dsh-media/zlm/linux
+curl -fL -o MediaServer https://github.com/linwwcorp/dsh-media/releases/download/v0.1.0/MediaServer
+curl -fL -o libjemalloc.so.2 https://github.com/linwwcorp/dsh-media/releases/download/v0.1.0/libjemalloc.so.2
+chmod +x MediaServer
+```
+
+放好之后再安装：
 
 ```sh
 dsh plugin install /path/to/dsh-media
 ```
 
-`MediaServer` 和 `libjemalloc.so.2` 不在仓库里，构建镜像时从 Release `v0.1.0` 下载。插件启用后会按编排文件拉起 ZLMediaKit 容器。需要单独启动时：
+从 GitHub 安装时不用手动下载，构建镜像会自己从 Release `v0.1.0` 拉取这两个文件。本地目录里如果已经放了 `zlm/linux/MediaServer` 和 `zlm/linux/libjemalloc.so.2`，构建会直接用它们。插件启用后会按编排文件拉起 ZLMediaKit 容器。需要单独启动时：
 
 ```sh
 cd zlm/linux
