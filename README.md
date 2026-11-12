@@ -17,17 +17,28 @@ configure the common ports, the API secret, and whether MP4 recording storage is
 - **端口配置**：HTTP、RTSP、RTMP、WebRTC 端口在插件界面配置；保存并应用后写入 ZLMediaKit 的 `setServerConfig`，改端口后按提示重启。
 - **Agent 工具**：`list_media_streams`、`add_media_stream`、`list_media_recordings`、`get_media_server_status`。
 
+## 前置条件 / Requirements
+
+- **Linux**。插件自带的 ZLMediaKit 运行文件和 `zlm/linux` 编排只在 Linux 上使用。
+- **Docker Compose**。媒体服务用 `zlm/linux/docker-compose.yml` 编排；机器上要有 Docker，并且 `docker compose` 可用。
+
 ## 安装 / Install
 
-在 Harness 的插件管理器安装本地目录：
+优先从 GitHub 安装：
 
 ```sh
-dsh plugin install /root/CODE/dsh-media
+dsh plugin install https://github.com/linwwcorp/dsh-media
 ```
 
-或通过 `plugin_manager` 的 `install_bundle` 操作，`target` 传 `/root/CODE/dsh-media`。
+`plugin_manager` 的 `install_bundle` 同样把 `target` 设为 `https://github.com/linwwcorp/dsh-media`。
 
-本仓库同时带有 ZLMediaKit 的 Linux 运行文件（`zlm/`），可以用 `zlm/linux/docker-compose.yml` 启动媒体服务：
+没有外网、或要装手头这份目录时，再用本地路径：
+
+```sh
+dsh plugin install /path/to/dsh-media
+```
+
+插件启用后会按编排文件拉起 ZLMediaKit 容器。需要单独启动时：
 
 ```sh
 cd zlm/linux
