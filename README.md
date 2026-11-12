@@ -38,7 +38,7 @@ dsh plugin install https://github.com/linwwcorp/dsh-media
 dsh plugin install /path/to/dsh-media
 ```
 
-插件启用后会按编排文件拉起 ZLMediaKit 容器。需要单独启动时：
+`MediaServer` 和 `libjemalloc.so.2` 不在仓库里，构建镜像时从 Release `v0.1.0` 下载。插件启用后会按编排文件拉起 ZLMediaKit 容器。需要单独启动时：
 
 ```sh
 cd zlm/linux

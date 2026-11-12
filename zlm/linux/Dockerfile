@@ -4,9 +4,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Shanghai \
     LD_LIBRARY_PATH=/usr/local/lib
 
+ARG ZLM_RELEASE=v0.1.0
+ARG ZLM_RELEASE_BASE=https://github.com/linwwcorp/dsh-media/releases/download
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
         tzdata \
         libssl3 \
         ffmpeg && \
@@ -15,11 +19,15 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY libjemalloc.so.2 /usr/local/lib/libjemalloc.so.2
-RUN ldconfig
+RUN curl -fsSL -o /usr/local/lib/libjemalloc.so.2 \
+        "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/libjemalloc.so.2" && \
+    ldconfig
 
 WORKDIR /opt/media/bin
-COPY MediaServer default.pem ./
+RUN curl -fsSL -o /opt/media/bin/MediaServer \
+        "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/MediaServer" && \
+    chmod +x /opt/media/bin/MediaServer
+COPY default.pem ./
 COPY www ./www
 COPY config.ini /opt/media/conf/config.ini
 RUN mkdir -p /opt/media/bin/www/snap /opt/media/bin/ffmpeg && \
