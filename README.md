@@ -34,8 +34,8 @@ dsh plugin install https://github.com/linwwcorp/dsh-media
 
 ```sh
 cd /path/to/dsh-media/zlm/linux
-curl -fL -o MediaServer https://github.com/linwwcorp/dsh-media/releases/download/v0.1.0/MediaServer
-curl -fL -o libjemalloc.so.2 https://github.com/linwwcorp/dsh-media/releases/download/v0.1.0/libjemalloc.so.2
+curl -fL -o MediaServer https://github.com/linwwcorp/dsh-media/releases/download/v0.1.1/MediaServer
+curl -fL -o libjemalloc.so.2 https://github.com/linwwcorp/dsh-media/releases/download/v0.1.1/libjemalloc.so.2
 chmod +x MediaServer
 ```
 
@@ -45,7 +45,7 @@ chmod +x MediaServer
 dsh plugin install /path/to/dsh-media
 ```
 
-从 GitHub 安装时不用手动下载，构建镜像会自己从 Release `v0.1.0` 拉取这两个文件。本地目录里如果已经放了 `zlm/linux/MediaServer` 和 `zlm/linux/libjemalloc.so.2`，构建会直接用它们。插件启用后会按编排文件拉起 ZLMediaKit 容器。需要单独启动时：
+从 GitHub 安装时不用手动下载，构建镜像会自己从 Release `v0.1.1` 拉取这些文件（`MediaServer`、`libjemalloc.so.2`，以及 `zlm-extra-libs.tar.gz`）。本地目录里如果已经放了 `zlm/linux/MediaServer` 和 `zlm/linux/libjemalloc.so.2`，构建会直接用它们；`zlm/linux/extra-libs/` 存在时也会直接拷贝，不再下载压缩包。插件启用后会按编排文件拉起 ZLMediaKit 容器。需要单独启动时：
 
 ```sh
 cd zlm/linux
@@ -185,8 +185,8 @@ Use a local directory when the machine has no outbound network, or when you alre
 
 ```sh
 cd /path/to/dsh-media/zlm/linux
-curl -fL -o MediaServer https://github.com/linwwcorp/dsh-media/releases/download/v0.1.0/MediaServer
-curl -fL -o libjemalloc.so.2 https://github.com/linwwcorp/dsh-media/releases/download/v0.1.0/libjemalloc.so.2
+curl -fL -o MediaServer https://github.com/linwwcorp/dsh-media/releases/download/v0.1.1/MediaServer
+curl -fL -o libjemalloc.so.2 https://github.com/linwwcorp/dsh-media/releases/download/v0.1.1/libjemalloc.so.2
 chmod +x MediaServer
 ```
 
@@ -196,7 +196,7 @@ Then install:
 dsh plugin install /path/to/dsh-media
 ```
 
-A GitHub install does not need this manual download. The image build fetches both files from Release `v0.1.0`. If `zlm/linux/MediaServer` and `zlm/linux/libjemalloc.so.2` are already present, the build uses those files. Enabling the plugin starts the ZLMediaKit container from the Compose file. To start it yourself:
+A GitHub install does not need this manual download. The image build fetches `MediaServer`, `libjemalloc.so.2`, and the extra shared libraries (`zlm-extra-libs.tar.gz`) from Release `v0.1.1`. If `zlm/linux/MediaServer` and `zlm/linux/libjemalloc.so.2` are already present, the build uses those files, and a local `zlm/linux/extra-libs/` directory is copied instead of downloading the archive. Enabling the plugin starts the ZLMediaKit container from the Compose file. To start it yourself:
 
 ```sh
 cd zlm/linux

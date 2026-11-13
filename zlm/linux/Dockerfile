@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Shanghai \
     LD_LIBRARY_PATH=/usr/local/lib
 
-ARG ZLM_RELEASE=v0.1.0
+ARG ZLM_RELEASE=v0.1.1
 ARG ZLM_RELEASE_BASE=https://github.com/linwwcorp/dsh-media/releases/download
 
 RUN apt-get update && \
@@ -32,8 +32,14 @@ RUN if [ -s /tmp/zlm-linux/MediaServer ] && [ -s /tmp/zlm-linux/libjemalloc.so.2
         "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/MediaServer"; \
     fi && \
     chmod +x /opt/media/bin/MediaServer && \
+    cd /tmp && \
     if [ -d /tmp/zlm-linux/extra-libs ]; then \
       cp -a /tmp/zlm-linux/extra-libs/. /usr/local/lib/; \
+    else \
+      curl -fsSL -o /tmp/zlm-extra-libs.tar.gz \
+        "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/zlm-extra-libs.tar.gz" && \
+      tar -xzf /tmp/zlm-extra-libs.tar.gz -C /usr/local/lib && \
+      rm -f /tmp/zlm-extra-libs.tar.gz; \
     fi && \
     rm -rf /tmp/zlm-linux && \
     ldconfig
