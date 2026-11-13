@@ -118,8 +118,7 @@ window.__ModuleLoader__.load({
         'node.stream': 'Stream id',
         'node.description': 'Description',
         'node.source': 'Source',
-        'dialog.folderTitle': 'New folder',
-        'dialog.streamTitle': 'Add stream',
+        'dialog.folderTitle': 'New folder',        'dialog.streamTitle': 'Add stream',
         'dialog.editTitle': 'Edit node',
         'dialog.parent': 'Parent folder',
         'dialog.name': 'Name',
@@ -127,6 +126,8 @@ window.__ModuleLoader__.load({
         'dialog.sourcePlaceholder': 'rtsp://192.168.1.10:554/stream1',
         'dialog.appPlaceholder': 'live',
         'dialog.streamPlaceholder': 'Leave blank to generate',
+        'dialog.autoStream': 'Leave blank to generate',
+        'dialog.streamHint': 'The exported composite is published as live/<stream id>.',
         'dialog.descriptionPlaceholder': 'Optional notes about this stream',
         'dialog.save': 'Save',
         'dialog.saving': 'Saving…',
@@ -139,6 +140,50 @@ window.__ModuleLoader__.load({
         'delete.failed': 'The node could not be deleted.',
         'folder.addStream': 'Add stream here',
         'folder.newSubfolder': 'New subfolder',
+        'folder.createLive': 'Create live canvas',
+        'canvas.title': 'Live canvas',
+        'canvas.aspect': 'Aspect ratio',
+        'canvas.hint': 'Drag a stream from the left onto the canvas.',
+        'canvas.close': 'Close canvas',
+        'canvas.export': 'Export live stream',
+        'canvas.exportTitle': 'Export live stream',
+        'canvas.needTile': 'Drag at least one stream onto the canvas first.',
+        'canvas.emptyInfo': 'Select a stream on the canvas to see its details.',
+        'canvas.lock': 'Lock',
+        'canvas.unlock': 'Unlock',
+        'canvas.fill': 'Fill canvas',
+        'canvas.volume': 'Volume',
+        'canvas.volumeHint': 'Every stream is mixed together; 0% mutes this one.',
+        'canvas.crop': 'Crop',
+        'canvas.cropAdd': 'Add crop',
+        'canvas.cropLimit': 'Up to 3 crop windows per stream',
+        'canvas.cropHint': 'Crop this stream into a shape; the rest turns transparent.',
+        'canvas.cropTitle': 'Crop stream',
+        'canvas.cropHelp': 'Drag the shape to move it, drag the corner to resize it.',
+        'canvas.cropConfirm': 'Apply',
+        'crop.rect': 'Rectangle',
+        'crop.roundRect': 'Rounded square',
+        'crop.circle': 'Circle',
+        'crop.ellipse': 'Ellipse',
+        'crop.triangle': 'Triangle',
+        'crop.diamond': 'Diamond',
+        'canvas.toFront': 'Bring to front',
+        'canvas.toFrontHint': 'Draw this stream above the others',
+        'canvas.app': 'App / stream',
+        'canvas.resolution': 'Resolution',
+        'canvas.videoCodec': 'Video codec',
+        'canvas.fps': 'Frame rate',
+        'canvas.gop': 'GOP',
+        'canvas.audioCodec': 'Audio codec',
+        'canvas.sampleRate': 'Sample rate',
+        'canvas.channels': 'Channels',
+        'canvas.sampleBit': 'Sample bits',
+        'canvas.schema': 'Protocol',
+        'canvas.origin': 'Origin',
+        'canvas.bitrate': 'Bitrate',
+        'canvas.readers': 'Readers',
+        'canvas.alive': 'Uptime',
+        'canvas.offline': 'This stream is offline, so media details are not available yet.',
         'settings.title': 'Server settings',
         'settings.subtitle': 'Connection, ports, and recording storage for ZLMediaKit.',
         'settings.connection': 'Connection',
@@ -162,6 +207,8 @@ window.__ModuleLoader__.load({
         'settings.storageMode': 'Recording storage',
         'settings.storageMinio': 'MinIO (database plugin)',
         'settings.storageLocal': 'Local disk',
+        'settings.retentionHours': 'Recording retention (hours)',
+        'settings.retentionHint': 'Recordings older than this are deleted automatically. 0 keeps them forever.',
         'settings.recordPath': 'MP4 save path',
         'settings.recordApp': 'Recording app name',
         'settings.saved': 'Settings saved.',
@@ -275,6 +322,8 @@ window.__ModuleLoader__.load({
         'dialog.sourcePlaceholder': 'rtsp://192.168.1.10:554/stream1',
         'dialog.appPlaceholder': 'live',
         'dialog.streamPlaceholder': '留空自动生成',
+        'dialog.autoStream': '留空自动生成',
+        'dialog.streamHint': '导出的画面会发布为 live/<流 ID>。',
         'dialog.descriptionPlaceholder': '可选的备注信息',
         'dialog.save': '保存',
         'dialog.saving': '正在保存…',
@@ -287,6 +336,50 @@ window.__ModuleLoader__.load({
         'delete.failed': '删除失败。',
         'folder.addStream': '在这里添加流',
         'folder.newSubfolder': '新建子目录',
+        'folder.createLive': '创建直播流',
+        'canvas.title': '直播画布',
+        'canvas.aspect': '画面宽高比',
+        'canvas.hint': '从左侧把视频流拖到画布上。',
+        'canvas.close': '关闭画布',
+        'canvas.export': '导出直播流',
+        'canvas.exportTitle': '导出直播流',
+        'canvas.needTile': '先把至少一路流拖到画布上。',
+        'canvas.emptyInfo': '选中画布上的流后，这里显示它的信息。',
+        'canvas.lock': '上锁',
+        'canvas.unlock': '解锁',
+        'canvas.fill': '铺满画布',
+        'canvas.volume': '音量',
+        'canvas.volumeHint': '多路声音会混合输出，调到 0% 可静音这路。',
+        'canvas.crop': '裁切',
+        'canvas.cropAdd': '添加裁切',
+        'canvas.cropLimit': '每路流最多 3 个裁切区域',
+        'canvas.cropHint': '把这路流裁成指定形状，其余部分变透明。',
+        'canvas.cropTitle': '裁切画面',
+        'canvas.cropHelp': '拖动图形可移动，拖动右下角可放大缩小。',
+        'canvas.cropConfirm': '确认裁剪',
+        'crop.rect': '矩形',
+        'crop.roundRect': '圆角方形',
+        'crop.circle': '圆形',
+        'crop.ellipse': '椭圆形',
+        'crop.triangle': '三角形',
+        'crop.diamond': '菱形',
+        'canvas.toFront': '画布置顶',
+        'canvas.toFrontHint': '让这路流显示在其他流上面',
+        'canvas.app': '应用名 / 流 ID',
+        'canvas.resolution': '分辨率',
+        'canvas.videoCodec': '视频编码',
+        'canvas.fps': '帧率',
+        'canvas.gop': '关键帧间隔',
+        'canvas.audioCodec': '音频编码',
+        'canvas.sampleRate': '采样率',
+        'canvas.channels': '声道',
+        'canvas.sampleBit': '采样位深',
+        'canvas.schema': '协议',
+        'canvas.origin': '来源',
+        'canvas.bitrate': '码率',
+        'canvas.readers': '观看人数',
+        'canvas.alive': '已持续',
+        'canvas.offline': '这一路还没在线，暂时没有编码信息。',
         'settings.title': '服务设置',
         'settings.subtitle': 'ZLMediaKit 的连接、端口与录制存储。',
         'settings.connection': '连接',
@@ -310,6 +403,8 @@ window.__ModuleLoader__.load({
         'settings.storageMode': '录像存储位置',
         'settings.storageMinio': 'MinIO（数据库插件）',
         'settings.storageLocal': '本地磁盘',
+        'settings.retentionHours': '录像保留时长（小时）',
+        'settings.retentionHint': '超过这个时长的录像会被自动删除；填 0 表示永久保留。',
         'settings.recordPath': 'MP4 保存路径',
         'settings.recordApp': '录像应用名',
         'settings.saved': '设置已保存。',
@@ -415,6 +510,8 @@ window.__ModuleLoader__.load({
 .dsh-media-stream { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .dsh-media-stream > .dsh-media-player-head { padding: 18px 22px 0; }
 .dsh-media-tree-icon { display: inline-flex; flex: none; color: var(--dsw-alias-label-secondary); }
+.dsh-media-tree-icon-folder { color: #f2b13c; }
+.dsh-media-folder-glyph { color: #f2b13c; }
 .dsh-media-tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .dsh-media-tree-actions { display: none; align-items: center; gap: 2px; flex: none; }
 .dsh-media-tree-row:hover .dsh-media-tree-actions,
@@ -480,6 +577,44 @@ window.__ModuleLoader__.load({
 }
 @keyframes dsh-media-spin { to { transform: rotate(360deg); } }
 .dsh-media-toolbar-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.dsh-media-inspector-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.dsh-media-range { width: 100%; accent-color: #5b93f5; }
+.dsh-media-crop-block { margin-top: 12px; display: grid; gap: 8px; }
+.dsh-media-crop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; }
+.dsh-media-crop-list { display: grid; gap: 4px; }
+.dsh-media-crop-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.dsh-media-crop-swatch { display: inline-flex; flex: none; width: 18px; height: 18px; align-items: center; justify-content: center; }
+.dsh-media-crop-swatch-shape { display: block; width: 14px; height: 14px; background: #5b93f5; }
+.dsh-media-crop-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-media-crop-shapes { display: flex; flex-wrap: wrap; gap: 6px; }
+.dsh-media-crop-shape {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px;
+  background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer;
+}
+.dsh-media-crop-shape:hover { background: var(--dsw-alias-bg-layer-2); }
+.dsh-media-crop-shape-active { border-color: #5b93f5; color: #5b93f5; background: rgba(91,147,245,.12); }
+.dsh-media-crop-stage {
+  position: relative; width: 100%; max-height: 52vh; overflow: hidden;
+  border-radius: 10px; background: #0d1119; border: 0.5px solid var(--dsw-alias-border-l1);
+  touch-action: none; cursor: crosshair;
+}
+.dsh-media-crop-stage .dsh-media-canvas-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dsh-media-crop-preview { position: absolute; inset: 0; }
+.dsh-media-crop-preview .dsh-media-canvas-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dsh-media-crop-shade { position: absolute; inset: 0; background: repeating-linear-gradient(45deg, rgba(0,0,0,.45) 0 6px, rgba(0,0,0,.28) 6px 12px); pointer-events: none; }
+.dsh-media-crop-box {
+  position: absolute; box-sizing: border-box; border: 1px dashed rgba(255,255,255,.85);
+  box-shadow: 0 0 0 1px rgba(91,147,245,.85) inset; cursor: move; touch-action: none;
+}
+.dsh-media-crop-shape-mask {
+  position: absolute; inset: 0; display: block;
+  background: rgba(91,147,245,.22); box-shadow: 0 0 0 9999px rgba(0,0,0,.35) inset;
+}
+.dsh-media-crop-resize {
+  position: absolute; right: -5px; bottom: -5px; width: 12px; height: 12px;
+  border-radius: 3px; background: #5b93f5; border: 1px solid #fff; cursor: nwse-resize;
+}
 .dsh-media-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 32px; padding: 0 12px;
@@ -528,6 +663,50 @@ window.__ModuleLoader__.load({
 .dsh-media-notice-error { color: var(--dsw-alias-state-error-primary); }
 .dsh-media-notice-success { color: var(--dsw-alias-state-success-primary); }
 .dsh-media-replay-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.dsh-media-canvas-page { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.dsh-media-canvas-main { display: flex; flex-direction: column; align-items: center; gap: 14px; flex: 1; min-width: 0; padding: 18px 22px 28px; }
+.dsh-media-canvas-main > .dsh-media-player-head { align-self: stretch; }
+.dsh-media-canvas-aspects { display: flex; flex-wrap: wrap; gap: 8px; }
+.dsh-media-canvas-aspect {
+  height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 0.5px solid var(--dsw-alias-border-l2); background: transparent;
+  color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px;
+}
+.dsh-media-canvas-aspect-active { border-color: #5b93f5; background: #e7f1ff; color: #1d4f8a; }
+.dsh-media-canvas {
+  position: relative; width: min(100%, 880px); max-height: 68vh; margin: 36px auto 0;
+  border-radius: 12px; background: #10141c; overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+}
+.dsh-media-canvas-portrait { width: auto; height: min(68vh, 760px); max-width: 100%; }
+.dsh-media-canvas-media { position: absolute; inset: 0; pointer-events: none; }
+.dsh-media-canvas-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; pointer-events: none; }
+.dsh-media-canvas-hint {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; color: rgba(255,255,255,.72); font-size: 13px; pointer-events: none;
+}
+.dsh-media-canvas-tile {
+  position: absolute; box-sizing: border-box; min-width: 48px; min-height: 36px;
+  border-radius: 8px; border: 1px solid rgba(255,255,255,.28);
+  background: rgba(91, 147, 245, .28); color: #fff; overflow: hidden; cursor: move;
+}
+.dsh-media-canvas-tile-selected { border-color: #8eb6ff; box-shadow: 0 0 0 1px #5b93f5; }
+.dsh-media-canvas-tile-cropped { background: transparent; }
+.dsh-media-canvas-tile-locked { cursor: default; }
+.dsh-media-canvas-tile-name {
+  position: absolute; left: 8px; right: 16px; top: 6px; z-index: 1;
+  font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0,0,0,.6);
+}
+.dsh-media-canvas-resize {
+  position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; z-index: 1; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, #fff 50%);
+}
+.dsh-media-canvas-side {
+  flex: none; width: 280px; min-height: 0; overflow: auto;
+  border-left: 0.5px solid var(--dsw-alias-border-l1); padding: 18px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
 .dsh-media-timeline { display: grid; gap: 6px; }
 .dsh-media-timeline-track {
   position: relative; height: 36px; border-radius: 8px;
@@ -683,11 +862,14 @@ window.__ModuleLoader__.load({
 
     const ICON_PATHS = {
       folder: 'M1.75 4.25c0-.55.45-1 1-1h3.1c.3 0 .58.13.77.36l.63.79h5c.55 0 1 .45 1 1v6.35c0 .55-.45 1-1 1h-9.5c-.55 0-1-.45-1-1V4.25Z',
+      folderOpen: 'M1.75 5.6c0-.5.4-.9.9-.9h3.2c.28 0 .55.13.72.35l.6.75h5.18c.5 0 .9.4.9.9v4.9c0 .5-.4.9-.9.9H2.65c-.5 0-.9-.4-.9-.9V5.6Z',
       stream: 'M2 4.25c0-.55.45-1 1-1h10c.55 0 1 .45 1 1v7.5c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1v-7.5Zm4 1.5v4.5l3.8-2.25L6 5.75Z',
       chevron: 'M6 4l4 4-4 4',
       plus: 'M8 3.25v9.5M3.25 8h9.5',
       minus: 'M3.25 8h9.5',
       refresh: 'M13.3 8a5.3 5.3 0 1 1-1.55-3.75M13.3 2.6v3h-3',
+      expand: 'M2.8 6V2.8H6M10 2.8h3.2V6M13.2 10v3.2H10M6 13.2H2.8V10',
+      toFront: 'M8 2.2l3.4 2v6.6L8 12.8 4.6 10.8V4.2L8 2.2Zm0 0v10.6M4.6 4.2 8 6.4l3.4-2.2',
       settings: 'M8 5.4A2.6 2.6 0 1 0 8 10.6 2.6 2.6 0 0 0 8 5.4Zm5.3 2.6c0 .3-.03.58-.08.86l1.3 1.02-1.2 2.08-1.55-.62c-.45.38-.97.68-1.55.88L10 13.9H8l-.22-1.67a5.4 5.4 0 0 1-1.55-.88l-1.55.62-1.2-2.08 1.3-1.02a5.3 5.3 0 0 1 0-1.72L3.48 6.13l1.2-2.08 1.55.62c.45-.38.97-.68 1.55-.88L8 2.1h2l.22 1.67c.58.2 1.1.5 1.55.88l1.55-.62 1.2 2.08-1.3 1.02c.05.28.08.57.08.86Z',
       edit: 'M10.9 2.6l2.5 2.5-7.6 7.6-3.2.7.7-3.2 7.6-7.6Z',
       trash: 'M3.5 4.5h9M6 4.5V3.2c0-.4.32-.7.7-.7h2.6c.38 0 .7.3.7.7v1.3M4.4 4.5l.55 8.1c.03.48.43.85.9.85h4.3c.47 0 .87-.37.9-.85l.55-8.1',
@@ -698,21 +880,33 @@ window.__ModuleLoader__.load({
       record: 'M8 3.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z',
       camera: 'M2 5.2c0-.55.45-1 1-1h6c.55 0 1 .45 1 1v1.1l2.6-1.5c.4-.23.9.06.9.52v3.36c0 .46-.5.75-.9.52L10 7.7v1.1c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1V5.2Z',
       check: 'M3.5 8.5l3 3 6-7',
+      lock: 'M5 7.2V5.6a3 3 0 0 1 6 0v1.6M4.2 7.2h7.6c.5 0 .9.4.9.9v4.6c0 .5-.4.9-.9.9H4.2c-.5 0-.9-.4-.9-.9V8.1c0-.5.4-.9.9-.9Z',
+      unlock: 'M6.2 7.2V5.4a2.4 2.4 0 0 1 4.4-1.3M4.2 7.2h7.6c.5 0 .9.4.9.9v4.6c0 .5-.4.9-.9.9H4.2c-.5 0-.9-.4-.9-.9V8.1c0-.5.4-.9.9-.9Z',
     }
 
-    function Icon({ name, size = 16, strokeWidth = 1.5, className }) {
+    function Icon({ name, size = 16, strokeWidth = 1.5, className, filled = false }) {
       return h('svg', {
         width: size, height: size, viewBox: '0 0 16 16', fill: 'none',
         'aria-hidden': 'true', focusable: 'false', className,
       }, h('path', {
         d: ICON_PATHS[name] ?? ICON_PATHS.stream,
-        stroke: 'currentColor',
+        stroke: filled ? 'none' : 'currentColor',
         strokeWidth,
         strokeLinecap: 'round',
         strokeLinejoin: 'round',
-        fill: name === 'play' || name === 'folder' || name === 'stream' || name === 'record' || name === 'camera' || name === 'stop' ? 'none' : 'none',
+        fill: filled ? 'currentColor' : 'none',
       }))
     }
+
+    /** Every crop shape the canvas supports; `shapePath` draws the preview outline. */
+    const CROP_SHAPES = [
+      { id: 'rect', label: 'crop.rect', path: 'M2 2h12v12H2z' },
+      { id: 'roundRect', label: 'crop.roundRect', path: 'M5 2h6a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3z' },
+      { id: 'circle', label: 'crop.circle', path: 'M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1z' },
+      { id: 'ellipse', label: 'crop.ellipse', path: 'M8 2.6a6 4.4 0 1 1 0 10.8 6 4.4 0 0 1 0-10.8z' },
+      { id: 'triangle', label: 'crop.triangle', path: 'M8 1.8 15 14H1z' },
+      { id: 'diamond', label: 'crop.diamond', path: 'M8 1.2 14.8 8 8 14.8 1.2 8z' },
+    ]
 
     function PanelIcon({ size = 16, active = false }) {
       const strokeWidth = active ? 1.6 : 1.35
@@ -736,6 +930,87 @@ window.__ModuleLoader__.load({
           ? 'dsh-media-badge dsh-media-badge-offline'
           : 'dsh-media-badge'
       return h('span', { className }, h('span', { className: 'dsh-media-badge-dot' }), children)
+    }
+
+    /**
+     * Reorder one canvas tile inside the stack.
+     * Tiles are painted in array order, so the last one is on top; the export
+     * sends them in the same order and the compositor overlays them in turn.
+     * @param tiles - the current tile list.
+     * @param tileId - the tile to move.
+     * @returns a new tile list with the tile painted last.
+     */
+    function moveTile(tiles, tileId) {
+      const index = tiles.findIndex(tile => tile.id === tileId)
+      if (index === -1) return tiles
+      const next = tiles.slice()
+      const [tile] = next.splice(index, 1)
+      next.push(tile)
+      return next
+    }
+
+    /** Maximum crop windows per canvas tile. */
+    const MAX_CROPS = 3
+
+    /** @returns a numeric aspect ratio such as 1.7778 for the canvas aspect id. */
+    function aspectNumber(aspect) {
+      const parts = String(aspect).split(':').map(Number)
+      if (parts.length !== 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1]) || parts[1] === 0) return 16 / 9
+      return parts[0] / parts[1]
+    }
+
+    /** @returns the pixel aspect ratio of one tile on a canvas of the given aspect. */
+    function tileRatio(tile, aspect) {
+      const width = tile.w * aspectNumber(aspect)
+      const height = tile.h
+      if (!Number.isFinite(width) || !Number.isFinite(height) || height <= 0 || width <= 0) return 1
+      return width / height
+    }
+
+    /** @returns the CSS clip-path for one crop shape, used by previews and handles. */
+    function cropShapeClip(shape) {
+      if (shape === 'circle') return 'circle(closest-side)'
+      if (shape === 'ellipse') return 'ellipse(farthest-side farthest-side)'
+      if (shape === 'roundRect') return 'inset(0 round 18%)'
+      if (shape === 'triangle') return 'polygon(50% 0%, 100% 100%, 0% 100%)'
+      if (shape === 'diamond') return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+      return 'inset(0)'
+    }
+
+    /** @returns a CSS mask style that keeps one tile visible only inside its crop regions. */
+    function cropMaskStyle(crops, ratio) {
+      // The SVG box uses one unit per 0.01 of tile height on both axes, so shapes stay unsquashed.
+      const width = (100 * ratio).toFixed(2)
+      const shapes = crops.map((crop) => {
+        const x = (crop.x * ratio).toFixed(2)
+        const y = Number(crop.y).toFixed(2)
+        const w = (crop.w * ratio).toFixed(2)
+        const h = Number(crop.h).toFixed(2)
+        const cx = (crop.x * ratio + crop.w * ratio / 2).toFixed(2)
+        const cy = (crop.y + crop.h / 2).toFixed(2)
+        const minSide = Math.min(crop.w * ratio, crop.h)
+        if (crop.shape === 'circle') {
+          const radius = (minSide / 2).toFixed(2)
+          return `<circle cx="${cx}" cy="${cy}" r="${radius}"/>`
+        }
+        if (crop.shape === 'ellipse') {
+          return `<ellipse cx="${cx}" cy="${cy}" rx="${(crop.w * ratio / 2).toFixed(2)}" ry="${(crop.h / 2).toFixed(2)}"/>`
+        }
+        if (crop.shape === 'roundRect') {
+          const radius = (minSide * 0.18).toFixed(2)
+          return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" ry="${radius}"/>`
+        }
+        if (crop.shape === 'triangle') {
+          return `<polygon points="${cx},${y} ${(Number(x) + Number(w)).toFixed(2)},${(Number(y) + Number(h)).toFixed(2)} ${x},${(Number(y) + Number(h)).toFixed(2)}"/>`
+        }
+        if (crop.shape === 'diamond') {
+          return `<polygon points="${cx},${y} ${(Number(x) + Number(w)).toFixed(2)},${cy} ${cx},${(Number(y) + Number(h)).toFixed(2)} ${x},${cy}"/>`
+        }
+        return `<rect x="${x}" y="${y}" width="${w}" height="${h}"/>`
+      }).join('')
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 100" preserveAspectRatio="none"><g fill="#fff">${shapes}</g></svg>`
+      const url = `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`
+      return { maskImage: url, WebkitMaskImage: url, maskSize: '100% 100%', WebkitMaskSize: '100% 100%', maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }
     }
 
     function buildChildren(nodes) {
@@ -777,6 +1052,7 @@ window.__ModuleLoader__.load({
         recordEnabled: settings.recordEnabled === true,
         segmentSeconds: text('segmentSeconds', '60'),
         recordLocalDir: text('recordLocalDir', ''),
+        retentionHours: text('retentionHours', '168'),
         recordPath: text('recordPath', './www'),
         recordApp: text('recordApp', 'record'),
       }
@@ -832,13 +1108,19 @@ window.__ModuleLoader__.load({
       return value === '' || /^[A-Za-z0-9_.-]+$/.test(value)
     }
 
-    /** @returns a stream id that satisfies the catalog identifier rules. */
-    function newStreamId() {
-      const raw = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID().replace(/-/g, '').slice(0, 10)
-        : String(Date.now())
-      return `media_${raw}`
-    }
+  /** @returns a stream id that satisfies the catalog identifier rules. */
+  function newStreamId() {
+    const raw = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/-/g, '').slice(0, 10)
+      : String(Date.now())
+    return `media_${raw}`
+  }
+
+  /** @returns every folder in the catalog, parents before children. */
+  function folderOptions(nodes) {
+    const folders = nodes.filter(node => node.kind === 'folder').sort((left, right) => nodePath(nodes, left).localeCompare(nodePath(nodes, right)))
+    return folders.map(folder => ({ id: folder.id, label: nodePath(nodes, folder) }))
+  }
 
     /** One labeled control row. */
     function Field({ label, children }) {
@@ -897,6 +1179,7 @@ window.__ModuleLoader__.load({
         || draft.recordPath.trim() === ''
         || !identifierOk(draft.recordApp.trim())
         || !Number.isInteger(Number(draft.segmentSeconds)) || Number(draft.segmentSeconds) < 5 || Number(draft.segmentSeconds) > 3600
+        || !Number.isInteger(Number(draft.retentionHours)) || Number(draft.retentionHours) < 0 || Number(draft.retentionHours) > 87600
       const payload = () => {
         const body = {
           zlmHost: draft.zlmHost.trim(),
@@ -908,6 +1191,7 @@ window.__ModuleLoader__.load({
           recordEnabled: draft.recordEnabled,
           segmentSeconds: Number(draft.segmentSeconds),
           recordLocalDir: draft.recordLocalDir.trim(),
+          retentionHours: Number(draft.retentionHours),
           recordPath: draft.recordPath.trim(),
           recordApp: draft.recordApp.trim(),
         }
@@ -1080,7 +1364,13 @@ window.__ModuleLoader__.load({
               h('input', {
                 className: 'dsh-media-input', value: draft.recordApp,
                 onChange: event => set('recordApp', event.target.value),
-              })))),
+              }))),
+          h(Field, { label: t('settings.retentionHours') },
+            h('input', {
+              className: 'dsh-media-input', inputMode: 'numeric', value: draft.retentionHours,
+              onChange: event => set('retentionHours', event.target.value),
+            })),
+          h('div', { className: 'dsh-media-tree-hint' }, t('settings.retentionHint'))),
         dirty ? h('div', { className: 'dsh-media-notice' }, t('settings.restartHint')) : null,
         notice === null ? null : h('div', {
           className: notice.tone === 'error'
@@ -1126,7 +1416,8 @@ window.__ModuleLoader__.load({
                   h('dt', null, t('settings.rtcPort')), h('dd', null, String(current.config?.rtcPort ?? '—')),
                   h('dt', null, t('settings.recordEnabled')), h('dd', null, current.config?.recordEnabled === true ? t('settings.recordOn') : t('settings.recordOff')),
                   h('dt', null, t('settings.recordPath')), h('dd', null, String(current.config?.recordPath ?? '—')),
-                  h('dt', null, t('settings.storageMode')), h('dd', null, String(current.config?.storage ?? '—') === 'minio' ? t('settings.storageMinio') : t('settings.storageLocal')))))),
+                  h('dt', null, t('settings.storageMode')), h('dd', null, String(current.config?.storage ?? '—') === 'minio' ? t('settings.storageMinio') : t('settings.storageLocal')),
+                  h('dt', null, t('settings.retentionHours')), h('dd', null, String(server?.settings?.retentionHours ?? current.config?.retentionHours ?? '—')))))),
         onClose === undefined ? null : h('div', { className: 'dsh-media-dialog-foot' },
           h('button', { type: 'button', className: 'dsh-media-button', onClick: onClose }, t('action.close'))))
     }
@@ -1790,9 +2081,535 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'dsh-media-player' }, video, replayBar, notice, timeline)
     }
 
+    const CANVAS_ASPECTS = [
+      { id: '16:9', ratio: '16 / 9' },
+      { id: '4:3', ratio: '4 / 3' },
+      { id: '1:1', ratio: '1 / 1' },
+      { id: '9:16', ratio: '9 / 16', portrait: true },
+      { id: '9:19.5', ratio: '9 / 19.5', portrait: true },
+      { id: '9:20', ratio: '9 / 20', portrait: true },
+    ]
+
+    /** Plays one catalog stream inside a canvas tile. */
+    function CanvasTilePlayer({ node }) {
+      const videoRef = useRef(null)
+      const pcRef = useRef(null)
+      useEffect(() => {
+        let cancelled = false
+        const video = videoRef.current
+        const stop = () => {
+          if (pcRef.current !== null) {
+            try { pcRef.current.close() } catch (_alreadyClosed) { /* already closed */ }
+            pcRef.current = null
+          }
+          if (video !== null) video.srcObject = null
+        }
+        const play = async () => {
+          try {
+            const prepared = await requestJson('POST', 'prepare', { id: node.id })
+            if (cancelled) return
+            if (prepared.status === null || prepared.status === undefined || prepared.status.online !== true) return
+            const PC = window.RTCPeerConnection
+            if (typeof PC !== 'function') return
+            const pc = new PC({ iceServers: [] })
+            pcRef.current = pc
+            pc.ontrack = (event) => {
+              if (cancelled || videoRef.current === null) return
+              const stream = event.streams !== undefined && event.streams.length > 0 ? event.streams[0] : new MediaStream([event.track])
+              videoRef.current.srcObject = stream
+              void videoRef.current.play().catch(() => {})
+            }
+            pc.addTransceiver('video', { direction: 'recvonly' })
+            pc.addTransceiver('audio', { direction: 'recvonly' })
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            const response = await fetch(`${API}/webrtc?app=${encodeURIComponent(node.app)}&stream=${encodeURIComponent(node.stream)}`, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'text/plain;charset=utf-8' },
+              body: offer.sdp,
+            })
+            const answer = await response.json()
+            if (cancelled || !response.ok || answer === null || typeof answer.sdp !== 'string' || (answer.code !== undefined && answer.code !== 0)) return
+            await pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp })
+          } catch (_playbackFailure) {
+            /* the tile stays blank when the stream is offline */
+          }
+        }
+        void play()
+        return () => { cancelled = true; stop() }
+      }, [node.id, node.app, node.stream])
+      return h('video', { ref: videoRef, className: 'dsh-media-canvas-video', muted: true, autoPlay: true, playsInline: true })
+    }
+
+    /** Right-hand canvas for arranging streams. The tree stays on the left. */
+    function CanvasPane({ t, nodes, parentId, onClose, onExported }) {
+      const [aspect, setAspect] = useState('16:9')
+      const [tiles, setTiles] = useState([])
+      const [selectedTileId, setSelectedTileId] = useState(null)
+      const [exportOpen, setExportOpen] = useState(false)
+      const [exportName, setExportName] = useState('')
+      const [exportDescription, setExportDescription] = useState('')
+      const [exportParentId, setExportParentId] = useState(parentId)
+      const [exportStream, setExportStream] = useState('')
+      const [exportBusy, setExportBusy] = useState(false)
+      const [exportError, setExportError] = useState(null)
+      const canvasRef = useRef(null)
+      const dragRef = useRef(null)
+      const aspectItem = CANVAS_ASPECTS.find(item => item.id === aspect) ?? null
+      const ratio = aspectItem === null ? '16 / 9' : aspectItem.ratio
+      const selectedTile = tiles.find(tile => tile.id === selectedTileId) ?? null
+      const selectedNode = selectedTile === null ? null : nodes.find(node => node.id === selectedTile.nodeId) ?? null
+      const [mediaStatus, setMediaStatus] = useState(null)
+      const [cropEditor, setCropEditor] = useState(null)
+      useEffect(() => { setExportParentId(parentId) }, [parentId])
+      useEffect(() => {
+        if (selectedNode === null) {
+          setMediaStatus(null)
+          return undefined
+        }
+        let cancelled = false
+        const load = () => {
+          requestJson('GET', `status?app=${encodeURIComponent(selectedNode.app)}&stream=${encodeURIComponent(selectedNode.stream)}`)
+            .then((data) => { if (!cancelled) setMediaStatus(data) })
+            .catch(() => { if (!cancelled) setMediaStatus(null) })
+        }
+        load()
+        const timer = window.setInterval(load, 5000)
+        return () => { cancelled = true; window.clearInterval(timer) }
+      }, [selectedNode === null ? '' : selectedNode.id])
+
+      useEffect(() => {
+        const move = (event) => {
+          const drag = dragRef.current
+          const canvas = canvasRef.current
+          if (drag === null || canvas === null) return
+          const rect = canvas.getBoundingClientRect()
+          if (rect.width <= 0 || rect.height <= 0) return
+          const dx = ((event.clientX - drag.x) / rect.width) * 100
+          const dy = ((event.clientY - drag.y) / rect.height) * 100
+          setTiles(current => current.map(tile => {
+            if (tile.id !== drag.id || tile.locked) return tile
+            if (drag.mode === 'move') {
+              return {
+                ...tile,
+                x: Math.min(100 - tile.w, Math.max(0, drag.originX + dx)),
+                y: Math.min(100 - tile.h, Math.max(0, drag.originY + dy)),
+              }
+            }
+            return {
+              ...tile,
+              w: Math.min(100 - tile.x, Math.max(8, drag.originW + dx)),
+              h: Math.min(100 - tile.y, Math.max(8, drag.originH + dy)),
+            }
+          }))
+        }
+        const end = () => { dragRef.current = null }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', end)
+        return () => {
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', end)
+        }
+      }, [])
+
+      const dropStream = (event) => {
+        event.preventDefault()
+        const nodeId = event.dataTransfer.getData('application/x-dsh-stream')
+        const canvas = canvasRef.current
+        if (nodeId === '' || canvas === null) return
+        if (nodes.some(node => node.id === nodeId && node.kind === 'stream') === false) return
+        const rect = canvas.getBoundingClientRect()
+        const x = ((event.clientX - rect.left) / rect.width) * 100
+        const y = ((event.clientY - rect.top) / rect.height) * 100
+        const tile = {
+          id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : String(Date.now()),
+          nodeId,
+          x: Math.min(68, Math.max(0, x - 16)),
+          y: Math.min(68, Math.max(0, y - 12)),
+          w: 32,
+          h: 32,
+          volume: 100,
+          locked: false,
+        }
+        setTiles(current => [...current, tile])
+        setSelectedTileId(tile.id)
+      }
+
+      const stage = aspect === null
+        ? h('div', { className: 'dsh-media-tree-hint' }, t('canvas.aspect'))
+        : h('div', {
+          ref: canvasRef,
+          className: aspectItem !== null && aspectItem.portrait === true ? 'dsh-media-canvas dsh-media-canvas-portrait' : 'dsh-media-canvas',
+          style: { aspectRatio: ratio },
+          onDragOver: (event) => event.preventDefault(),
+          onDrop: dropStream,
+          onPointerDown: () => setSelectedTileId(null),
+        },
+        tiles.length === 0 ? h('div', { className: 'dsh-media-canvas-hint' }, t('canvas.hint')) : null,
+        tiles.map(tile => {
+          const node = nodes.find(item => item.id === tile.nodeId)
+          return h('div', {
+            key: tile.id,
+            className: [
+              'dsh-media-canvas-tile',
+              tile.id === selectedTileId ? 'dsh-media-canvas-tile-selected' : '',
+              tile.locked ? 'dsh-media-canvas-tile-locked' : '',
+              // A cropped tile must not paint its own tint outside the crop shapes.
+              Array.isArray(tile.crops) && tile.crops.length > 0 ? 'dsh-media-canvas-tile-cropped' : '',
+            ].filter(Boolean).join(' '),
+            style: { left: `${tile.x}%`, top: `${tile.y}%`, width: `${tile.w}%`, height: `${tile.h}%` },
+            onPointerDown: (event) => {
+              event.stopPropagation()
+              setSelectedTileId(tile.id)
+              if (tile.locked) return
+              dragRef.current = { id: tile.id, mode: 'move', x: event.clientX, y: event.clientY, originX: tile.x, originY: tile.y, originW: tile.w, originH: tile.h }
+            },
+          },
+          node === undefined ? null : h('div', {
+            className: 'dsh-media-canvas-media',
+            style: Array.isArray(tile.crops) && tile.crops.length > 0
+              ? cropMaskStyle(tile.crops, tileRatio(tile, aspect ?? '16:9'))
+              : undefined,
+          }, h(CanvasTilePlayer, { node })),
+          h('span', { className: 'dsh-media-canvas-tile-name' }, node === undefined ? tile.nodeId : node.name),
+          tile.locked ? null : h('span', {
+            className: 'dsh-media-canvas-resize',
+            onPointerDown: (event) => {
+              event.stopPropagation()
+              setSelectedTileId(tile.id)
+              dragRef.current = { id: tile.id, mode: 'resize', x: event.clientX, y: event.clientY, originX: tile.x, originY: tile.y, originW: tile.w, originH: tile.h }
+            },
+          }))
+        }))
+
+      const cropCount = selectedTile === null ? 0 : (selectedTile.crops?.length ?? 0)
+      const cropList = selectedTile === null || cropCount === 0
+        ? h('div', { className: 'dsh-media-tree-hint' }, t('canvas.cropHint'))
+        : h('div', { className: 'dsh-media-crop-list' },
+          selectedTile.crops.map((crop, index) => h('div', { key: String(index), className: 'dsh-media-crop-row' },
+            h('span', { className: 'dsh-media-crop-swatch' },
+              h('span', { className: 'dsh-media-crop-swatch-shape', style: { clipPath: cropShapeClip(crop.shape) } })),
+            h('span', { className: 'dsh-media-crop-name' }, t(CROP_SHAPES.find(shape => shape.id === crop.shape)?.label ?? 'crop.rect')),
+            h('button', {
+              type: 'button',
+              className: 'dsh-media-tree-action',
+              title: t('action.edit'),
+              onClick: () => setCropEditor({ tileId: selectedTile.id, index, draft: { ...crop } }),
+            }, h(Icon, { name: 'edit', size: 12 })),
+            h('button', {
+              type: 'button',
+              className: 'dsh-media-tree-action dsh-media-tree-action-danger',
+              title: t('action.delete'),
+              onClick: () => setTiles(current => current.map(tile => tile.id === selectedTile.id
+                ? { ...tile, crops: (tile.crops ?? []).filter((_item, itemIndex) => itemIndex !== index) }
+                : tile)),
+            }, h(Icon, { name: 'trash', size: 12 })))))
+
+      const info = selectedNode === null
+        ? h('div', { className: 'dsh-media-tree-hint' }, t('canvas.emptyInfo'))
+        : h(React.Fragment, null,          h('h2', { style: { margin: 0, fontSize: '16px' } }, selectedNode.name),
+          h('div', { className: 'dsh-media-dl' },
+            h('dt', null, t('canvas.app')),
+            h('dd', null, `${selectedNode.app}/${selectedNode.stream}`),
+            selectedNode.description === '' ? null : h('dt', null, t('node.description')),
+            selectedNode.description === '' ? null : h('dd', null, selectedNode.description),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dt', null, t('canvas.resolution')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.video === null ? null : h('dd', null, `${String(mediaStatus.video.width ?? '—')}×${String(mediaStatus.video.height ?? '—')}`),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.video === null ? null : h('dt', null, t('canvas.videoCodec')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.video === null ? null : h('dd', null, String(mediaStatus.video.codec ?? '—')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.video === null ? null : h('dt', null, t('canvas.fps')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.video === null ? null : h('dd', null, `${String(mediaStatus.video.fps ?? '—')} fps`),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.video === null ? null : h('dt', null, t('canvas.gop')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.video === null ? null : h('dd', null, `${String(mediaStatus.video.gopSize ?? '—')} / ${String(mediaStatus.video.gopIntervalMs ?? '—')} ms`),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dt', null, t('canvas.audioCodec')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dd', null, String(mediaStatus.audio.codec ?? '—')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dt', null, t('canvas.sampleRate')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dd', null, `${String(mediaStatus.audio.sampleRate ?? '—')} Hz`),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dt', null, t('canvas.channels')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dd', null, String(mediaStatus.audio.channels ?? '—')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dt', null, t('canvas.sampleBit')),
+            mediaStatus === null || mediaStatus.online !== true || mediaStatus.audio === null ? null : h('dd', null, String(mediaStatus.audio.sampleBit ?? '—')),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dt', null, t('canvas.schema')),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dd', null, mediaStatus.schema === '' ? '—' : String(mediaStatus.schema)),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dt', null, t('canvas.origin')),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dd', null, mediaStatus.origin === '' ? '—' : String(mediaStatus.origin)),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dt', null, t('canvas.bitrate')),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dd', null, `${String(Math.round((Number(mediaStatus.bytesSpeed) || 0) * 8 / 1000))} kbps`),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dt', null, t('canvas.readers')),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dd', null, String(mediaStatus.readers ?? 0)),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dt', null, t('canvas.alive')),
+            mediaStatus === null || mediaStatus.online !== true ? null : h('dd', null, `${String(mediaStatus.aliveSecond ?? 0)} s`)),
+          mediaStatus !== null && mediaStatus.online !== true ? h('div', { className: 'dsh-media-tree-hint' }, t('canvas.offline')) : null,
+          selectedTile === null ? null : h(Field, { label: `${t('canvas.volume')} · ${String(Math.round(selectedTile.volume ?? 100))}%` },
+            h('input', {
+              type: 'range',
+              className: 'dsh-media-range',
+              min: 0,
+              max: 200,
+              step: 5,
+              value: selectedTile.volume ?? 100,
+              onChange: event => setTiles(current => current.map(tile => tile.id === selectedTileId ? { ...tile, volume: Number(event.target.value) } : tile)),
+            }),
+            h('div', { className: 'dsh-media-tree-hint' }, t('canvas.volumeHint'))),
+          selectedTile === null ? null : h('div', { className: 'dsh-media-crop-block' },
+            h('div', { className: 'dsh-media-crop-head' },
+              h('span', null, t('canvas.crop')),
+              h('button', {
+                type: 'button',
+                className: 'dsh-media-button dsh-media-button-small',
+                disabled: cropCount >= MAX_CROPS,
+                title: cropCount >= MAX_CROPS ? t('canvas.cropLimit') : t('canvas.cropAdd'),
+                onClick: () => setCropEditor({ tileId: selectedTile.id, index: -1, draft: { shape: 'circle', x: 25, y: 25, w: 40, h: 40 } }),
+              }, h(Icon, { name: 'plus', size: 11 }), t('canvas.cropAdd'))),
+            cropList),
+          h('div', { className: 'dsh-media-inspector-actions' },
+          h('button', {
+            type: 'button',
+            className: 'dsh-media-button',
+            title: t('canvas.fill'),
+            onClick: () => setTiles(current => current.map(tile => tile.id === selectedTileId ? { ...tile, x: 0, y: 0, w: 100, h: 100, locked: true } : tile)),
+          }, h(Icon, { name: 'expand', size: 13 }), t('canvas.fill')),
+          h('button', {
+            type: 'button',
+            className: 'dsh-media-button',
+            title: t('canvas.toFrontHint'),
+            onClick: () => setTiles(current => moveTile(current, selectedTileId)),
+          }, h(Icon, { name: 'toFront', size: 13 }), t('canvas.toFront')),
+          h('button', {
+            type: 'button',
+            className: 'dsh-media-button',
+            onClick: () => setTiles(current => current.map(tile => tile.id === selectedTileId ? { ...tile, locked: !tile.locked } : tile)),
+          }, h(Icon, { name: selectedTile !== null && selectedTile.locked ? 'unlock' : 'lock', size: 13 }),
+          selectedTile !== null && selectedTile.locked ? t('canvas.unlock') : t('canvas.lock'))))
+
+      const submitExport = async (event) => {
+        event.preventDefault()
+        if (exportBusy || exportName.trim() === '' || tiles.length === 0) return
+        setExportBusy(true)
+        setExportError(null)
+        try {
+          const data = await requestJson('POST', 'nodes', {
+            action: 'exportCanvas',
+            name: exportName.trim(),
+            description: exportDescription.trim(),
+            parentId: exportParentId,
+            stream: exportStream.trim(),
+            aspect: aspect ?? '16:9',
+            tiles: tiles.map(tile => ({ nodeId: tile.nodeId, x: tile.x, y: tile.y, w: tile.w, h: tile.h, volume: tile.volume ?? 100, crops: tile.crops ?? [] })),
+          })
+          onExported(data.node)
+        } catch (failure) {
+          setExportError(failureText(failure, t))
+          setExportBusy(false)
+        }
+      }
+
+      const exportDialog = exportOpen ? h('div', {
+        className: 'dsh-media-overlay',
+        onMouseDown: (event) => { if (event.target === event.currentTarget && !exportBusy) setExportOpen(false) },
+      },
+      h('form', {
+        className: 'dsh-media-dialog',
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': t('canvas.exportTitle'),
+        onSubmit: (event) => { void submitExport(event) },
+      },
+      h('div', { className: 'dsh-media-dialog-head' },
+        h('h2', null, t('canvas.exportTitle')),
+        h('button', { type: 'button', className: 'dsh-media-icon-button', onClick: () => setExportOpen(false), 'aria-label': t('action.close') }, h(Icon, { name: 'close' }))),
+      h('div', { className: 'dsh-media-dialog-body' },
+        h(Field, { label: t('dialog.name') },
+          h('input', {
+            className: 'dsh-media-input',
+            value: exportName,
+            maxLength: 120,
+            placeholder: t('dialog.namePlaceholder'),
+            onChange: event => setExportName(event.target.value),
+          })),
+        h(Field, { label: t('dialog.parent') },
+          h('select', {
+            className: 'dsh-media-select',
+            value: exportParentId ?? '',
+            onChange: event => setExportParentId(event.target.value === '' ? null : event.target.value),
+          },
+          h('option', { value: '' }, t('tree.root')),
+          folderOptions(nodes).map(folder => h('option', { key: folder.id, value: folder.id }, folder.label)))),
+        h('div', { className: 'dsh-media-field-row' },
+          h(Field, { label: t('node.app') },
+            h('input', { className: 'dsh-media-input', value: 'live', readOnly: true })),
+          h(Field, { label: t('node.stream') },
+            h('input', {
+              className: 'dsh-media-input',
+              value: exportStream,
+              maxLength: 128,
+              placeholder: t('dialog.autoStream'),
+              onChange: event => setExportStream(event.target.value),
+            }))),
+        h('div', { className: 'dsh-media-tree-hint' }, t('dialog.streamHint')),
+        h(Field, { label: t('node.description') },
+          h('textarea', {
+            className: 'dsh-media-input',
+            style: { height: '64px', paddingTop: '7px', paddingBottom: '7px', resize: 'vertical' },
+            value: exportDescription,
+            maxLength: 4000,
+            placeholder: t('dialog.descriptionPlaceholder'),
+            onChange: event => setExportDescription(event.target.value),
+          })),
+        exportError === null ? null : h('div', { className: 'dsh-media-notice dsh-media-notice-error', role: 'alert' }, exportError)),
+      h('div', { className: 'dsh-media-dialog-foot' },
+        h('button', { type: 'button', className: 'dsh-media-button', disabled: exportBusy, onClick: () => setExportOpen(false) }, t('action.cancel')),
+        h('button', {
+          type: 'submit',
+          className: 'dsh-media-button dsh-media-button-soft',
+          disabled: exportBusy || exportName.trim() === '',
+        }, exportBusy ? t('dialog.saving') : t('dialog.save'))))) : null
+
+      return h('div', { className: 'dsh-media-canvas-page' },
+        h('div', { className: 'dsh-media-canvas-main' },
+          h('div', { className: 'dsh-media-player-head' },
+            h('div', { className: 'dsh-media-player-title' }, h('h2', null, t('canvas.title'))),
+            h('div', { className: 'dsh-media-toolbar-row' },
+              h('button', {
+                type: 'button',
+                className: 'dsh-media-button dsh-media-button-soft',
+                disabled: tiles.length === 0,
+                title: tiles.length === 0 ? t('canvas.needTile') : t('canvas.export'),
+                onClick: () => {
+                  setExportError(null)
+                  if (exportStream.trim() === '') setExportStream(newStreamId())
+                  setExportOpen(true)
+                },
+              }, t('canvas.export')),
+              h('button', { type: 'button', className: 'dsh-media-button', onClick: onClose }, t('canvas.close')))),
+          h('div', null,
+            h('div', { className: 'dsh-media-tree-hint', style: { marginBottom: '8px' } }, t('canvas.aspect')),
+            h('div', { className: 'dsh-media-canvas-aspects' },
+              CANVAS_ASPECTS.map(item => h('button', {
+                key: item.id,
+                type: 'button',
+                className: aspect === item.id ? 'dsh-media-canvas-aspect dsh-media-canvas-aspect-active' : 'dsh-media-canvas-aspect',
+                onClick: () => setAspect(item.id),
+              }, item.id)))),
+          stage),
+        h('aside', { className: 'dsh-media-canvas-side' }, info),
+        exportDialog,
+        cropEditor === null || tiles.find(tile => tile.id === cropEditor.tileId) === undefined ? null : h(CropEditor, {
+          t,
+          editor: cropEditor,
+          tile: tiles.find(tile => tile.id === cropEditor.tileId),
+          node: nodes.find(node => node.id === (tiles.find(tile => tile.id === cropEditor.tileId) ?? {}).nodeId),
+          aspect: aspect ?? '16:9',
+          onCancel: () => setCropEditor(null),
+          onConfirm: (crop) => {
+            setTiles(current => current.map(tile => {
+              if (tile.id !== cropEditor.tileId) return tile
+              const crops = (tile.crops ?? []).slice()
+              if (cropEditor.index < 0) crops.push(crop)
+              else crops[cropEditor.index] = crop
+              return { ...tile, crops }
+            }))
+            setCropEditor(null)
+          },
+        }))
+    }
+
+    /**
+     * Modal editor for one crop window.
+     * The shape is dragged and resized on a preview of the tile; confirming writes
+     * the new crop back into the canvas tile.
+     */
+    function CropEditor({ t, editor, tile, node, aspect, onCancel, onConfirm }) {
+      const [draft, setDraft] = useState(editor.draft)
+      const dragRef = useRef(null)
+      const frameRef = useRef(null)
+      useEffect(() => {
+        const onKey = (event) => { if (event.key === 'Escape') onCancel() }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+      }, [onCancel])
+      useEffect(() => {
+        const move = (event) => {
+          const drag = dragRef.current
+          const frame = frameRef.current
+          if (drag === null || frame === null) return
+          const rect = frame.getBoundingClientRect()
+          if (rect.width <= 0 || rect.height <= 0) return
+          const dx = (event.clientX - drag.x) / rect.width * 100
+          const dy = (event.clientY - drag.y) / rect.height * 100
+          if (drag.mode === 'move') {
+            setDraft(current => ({
+              ...current,
+              x: Math.min(100 - current.w, Math.max(0, drag.originX + dx)),
+              y: Math.min(100 - current.h, Math.max(0, drag.originY + dy)),
+            }))
+            return
+          }
+          setDraft(current => ({
+            ...current,
+            w: Math.min(100 - current.x, Math.max(6, drag.originW + dx)),
+            h: Math.min(100 - current.y, Math.max(6, drag.originH + dy)),
+          }))
+        }
+        const end = () => { dragRef.current = null }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', end)
+        return () => {
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', end)
+        }
+      }, [])
+      const ratio = tileRatio(tile, aspect)
+      const startDrag = (mode, event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        dragRef.current = { mode, x: event.clientX, y: event.clientY, originX: draft.x, originY: draft.y, originW: draft.w, originH: draft.h }
+      }
+      return h('div', {
+        className: 'dsh-media-overlay',
+        onMouseDown: (event) => { if (event.target === event.currentTarget) onCancel() },
+      },
+      h('div', { className: 'dsh-media-dialog dsh-media-dialog-wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('canvas.cropTitle') },
+        h('div', { className: 'dsh-media-dialog-head' },
+          h('h2', null, t('canvas.cropTitle')),
+          h('button', { type: 'button', className: 'dsh-media-icon-button', onClick: onCancel, 'aria-label': t('action.close') }, h(Icon, { name: 'close' }))),
+        h('div', { className: 'dsh-media-dialog-body' },
+          h('div', { className: 'dsh-media-crop-shapes' },
+            CROP_SHAPES.map(shape => h('button', {
+              key: shape.id,
+              type: 'button',
+              className: draft.shape === shape.id ? 'dsh-media-crop-shape dsh-media-crop-shape-active' : 'dsh-media-crop-shape',
+              title: t(shape.label),
+              'aria-label': t(shape.label),
+              onClick: () => setDraft(current => ({ ...current, shape: shape.id })),
+            }, h('svg', { viewBox: '0 0 16 16', width: 16, height: 16, 'aria-hidden': 'true' },
+              h('path', { d: shape.path, fill: draft.shape === shape.id ? 'currentColor' : 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinejoin: 'round' }))))),
+          h('div', {
+            ref: frameRef,
+            className: 'dsh-media-crop-stage',
+            style: { aspectRatio: String(ratio) },
+          },
+          node === undefined ? null : h('div', { className: 'dsh-media-crop-preview' }, h(CanvasTilePlayer, { node })),
+          h('div', { className: 'dsh-media-crop-shade' }),
+          h('div', {
+            className: 'dsh-media-crop-box',
+            style: { left: `${String(draft.x)}%`, top: `${String(draft.y)}%`, width: `${String(draft.w)}%`, height: `${String(draft.h)}%` },
+            onPointerDown: event => startDrag('move', event),
+          },
+          h('span', { className: 'dsh-media-crop-shape-mask', style: { clipPath: cropShapeClip(draft.shape) } }),
+          h('span', {
+            className: 'dsh-media-crop-resize',
+            onPointerDown: event => startDrag('resize', event),
+          }))),
+          h('div', { className: 'dsh-media-tree-hint' }, t('canvas.cropHelp'))),
+        h('div', { className: 'dsh-media-dialog-foot' },
+          h('button', { type: 'button', className: 'dsh-media-button', onClick: onCancel }, t('action.cancel')),
+          h('button', { type: 'button', className: 'dsh-media-button dsh-media-button-soft', onClick: () => onConfirm(draft) }, t('canvas.cropConfirm')))))
+    }
+
     /** Folder summary with direct children. */
-    function FolderPane({ t, node, nodes, onSelect, onAddStream, onAddFolder }) {
-      const children = nodes.filter(candidate => candidate.parentId === node.id)
+    function FolderPane({ t, node, nodes, onSelect, onAddStream, onAddFolder, onCreateLive }) {      const children = nodes.filter(candidate => candidate.parentId === node.id)
       return h('div', { className: 'dsh-media-player' },
         h('div', { className: 'dsh-media-player-head' },
           h('div', { className: 'dsh-media-player-title' },
@@ -1802,7 +2619,9 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', className: 'dsh-media-button', onClick: () => onAddStream(node.id) },
               h(Icon, { name: 'plus', size: 13 }), t('folder.addStream')),
             h('button', { type: 'button', className: 'dsh-media-button', onClick: () => onAddFolder(node.id) },
-              h(Icon, { name: 'folder', size: 13 }), t('folder.newSubfolder')))),
+              h(Icon, { name: 'folder', size: 13, className: 'dsh-media-folder-glyph', filled: true }), t('folder.newSubfolder')),
+            h('button', { type: 'button', className: 'dsh-media-button dsh-media-button-soft', onClick: onCreateLive },
+              h(Icon, { name: 'stream', size: 13 }), t('folder.createLive')))),
         h('div', { className: 'dsh-media-card' },
           h('div', { className: 'dsh-media-card-head' },
             h('span', { className: 'dsh-media-card-title' }, t('player.folderTitle')),
@@ -1833,6 +2652,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState(null)
       const [selectedId, setSelectedId] = useState(() => readPlaybackMemory().selectedId)
       const [streamTabs, setStreamTabs] = useState(() => readPlaybackMemory().tabs)
+      const [canvasOpen, setCanvasOpen] = useState(false)
       const [expanded, setExpanded] = useState(null)
       const [server, setServer] = useState(null)
       const [dialog, setDialog] = useState(null)
@@ -1934,7 +2754,12 @@ window.__ModuleLoader__.load({
             'aria-selected': node.id === selectedId,
             'aria-expanded': hasChildren ? isExpanded : undefined,
             tabIndex: 0,
-            onClick: () => setSelectedId(node.id),
+            draggable: isFolder ? undefined : true,
+            onDragStart: isFolder ? undefined : (event) => {
+              event.dataTransfer.setData('application/x-dsh-stream', node.id)
+              event.dataTransfer.effectAllowed = 'copy'
+            },
+            onClick: () => { if (!canvasOpen) setSelectedId(node.id) },
             onDoubleClick: () => { setSelectedId(node.id); setDialog({ mode: 'edit', target: node }) },
             onKeyDown: (event) => { if (event.key === 'Enter') setSelectedId(node.id) },
           },
@@ -1947,8 +2772,10 @@ window.__ModuleLoader__.load({
               style: { visibility: hasChildren ? 'visible' : 'hidden' },
             }, h(Icon, { name: 'chevron', size: 13, className: isExpanded ? undefined : 'dsh-media-chevron-closed' }))
             : h('span', { className: 'dsh-media-tree-spacer' }),
-          h('span', { className: 'dsh-media-tree-icon' },
-            h(Icon, { name: isFolder ? 'folder' : 'stream', size: 15 })),
+          h('span', { className: isFolder ? 'dsh-media-tree-icon dsh-media-tree-icon-folder' : 'dsh-media-tree-icon' },
+            isFolder
+              ? h(Icon, { name: isExpanded ? 'folderOpen' : 'folder', size: 15, filled: true })
+              : h(Icon, { name: 'stream', size: 15 })),
           h('span', { className: 'dsh-media-tree-label', title: node.name }, node.name),
           h('span', { className: 'dsh-media-tree-actions' },
             h('button', {
@@ -1999,7 +2826,7 @@ window.__ModuleLoader__.load({
             title: t('action.newFolder'),
             'aria-label': t('action.newFolder'),
             onClick: () => openCreate('folder', parentForNew()),
-          }, h(Icon, { name: 'folder', size: 14 })),
+          }, h(Icon, { name: 'folder', size: 14, filled: true, className: 'dsh-media-folder-glyph' })),
           h('button', {
             type: 'button',
             className: 'dsh-media-icon-button',
@@ -2020,7 +2847,18 @@ window.__ModuleLoader__.load({
 
       const detailPane = h('main', { className: 'dsh-media-main' },
         notice === null ? null : h('div', { className: 'dsh-media-notice', style: { margin: '12px 22px 0' } }, notice),
-        selected === null
+        canvasOpen
+          ? h(CanvasPane, {
+            t, nodes,
+            parentId: selected === null ? null : selected.kind === 'folder' ? selected.id : selected.parentId,
+            onClose: () => setCanvasOpen(false),
+            onExported: (node) => {
+              setCanvasOpen(false)
+              if (node !== null && node !== undefined && typeof node.id === 'string') setSelectedId(node.id)
+              void loadTree()
+            },
+          })
+          : selected === null
           ? h('div', { className: 'dsh-media-empty' },
             h(Icon, { name: 'stream', size: 30 }),
             h('h2', null, t('player.emptyTitle')),
@@ -2031,6 +2869,7 @@ window.__ModuleLoader__.load({
               onSelect: setSelectedId,
               onAddStream: (parentId) => openCreate('stream', parentId),
               onAddFolder: (parentId) => openCreate('folder', parentId),
+              onCreateLive: () => setCanvasOpen(true),
             })
             : h(StreamPane, {
               key: selected.id,

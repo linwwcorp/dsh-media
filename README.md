@@ -10,6 +10,7 @@
 - **直播播放**：通过 Host 中转 WebRTC offer/answer 播放，浏览器拿不到 ZLM API 密钥；同时提供 HLS、HTTP-FLV、RTSP、RTMP 地址。
 - **拉流代理**：给视频流配置 `rtsp://`、`rtmp://` 或 `http(s)://` 源地址后，首次播放时自动调用 `addStreamProxy` 把源拉进 ZLMediaKit。
 - **持续录制（监控回拨）**：默认开启，所有目录内的视频流持续录制为 MP4，按 `segmentSeconds`（默认 60 秒）切片。
+- **录像保留**：可配置保留时长（小时，默认 168 小时 = 7 天，0 表示永久保留）；超过时长的录像会从 MinIO/本地和索引中自动删除，并清理 ZLMediaKit 容器内对应的原始录像日期目录。
 - **录制存储与回放**：插件把 ZLMediaKit 完成的录像片段搬到存储中。检测到数据库插件时上传到 MinIO（对象前缀 `dsh-media/recordings/`），否则保存到本地录像目录；录像索引写入 PostgreSQL 表 `dsh_media_recordings` 或本地 `recordings.json`。回放页按日期显示时间轴，点击任意时刻即可播放对应片段，并支持下载 MP4。时间轴可缩放：滚轮以光标为中心缩放，或使用「缩小 / 放大 / 全天」和左右平移按钮，最小窗口 1 分钟。
 - **端口配置**：HTTP、RTSP、RTMP、WebRTC 端口在插件界面配置。保存并应用后写入 ZLMediaKit 的 `setServerConfig`，改端口后按提示重启。
 - **Agent 工具**：`list_media_streams`、`add_media_stream`、`list_media_recordings`、`get_media_server_status`。
@@ -64,6 +65,7 @@ docker compose up -d --build
 | 录制开关 | 开启后 ZLMediaKit 持续录制所有流为 MP4 |
 | 分段时长 | MP4 切片长度（秒），默认 60 |
 | 本地录像目录 | 没有数据库插件时的录像保存目录；留空使用 `$DSH_HOME/dsh-media/recordings` |
+| 录像保留时长 | 录像保留小时数，默认 168（7 天），0 表示永久保留；超期自动删除 |
 | MP4 保存路径 / 录像应用名 | ZLMediaKit `protocol.mp4_save_path` / `record.appName` |
 
 「保存」只更新插件配置；「保存并应用」还会调用 ZLMediaKit 的 `setServerConfig`；改端口后点「重启服务」。
@@ -100,6 +102,43 @@ docker compose up -d --build
 - 数据库插件存在时：流目录、录像索引写入 PostgreSQL；录像文件上传 MinIO，使用数据库插件里配置的 bucket。
 - 数据库插件不存在时：流目录保存为 `catalog.json`，录像索引保存为 `recordings.json`，录像文件保存到本地目录。
 - 回放与下载都通过插件的认证路由读取，MinIO 对象不会以公开 URL 暴露，支持 HTTP Range 拖动进度。
+
+## 对外开放能力
+
+插件把全部能力注册为 Cordis Service `mediaServer`，模型工具和其他插件都调用同一套实现。
+
+### 其他插件调用
+
+```js
+export const inject = ['mediaServer']
+
+export function apply(ctx) {
+  const nodes = await ctx.mediaServer.tree()
+  const prepared = await ctx.mediaServer.prepareStream({ id: nodes[0].id })
+  const media = await ctx.mediaServer.zlm('getMediaList', { app: 'live' }) // {code,msg,data}
+}
+```
+
+| 方法 | 说明 |
+| --- | --- |
+| `tree()` | 目录树 |
+| `settings()` / `updateSettings(patch)` | 读取/更新插件设置 |
+| `createFolder(body)` / `createStream(body)` | 新建目录/视频流 |
+| `updateNode(body)` / `deleteNode(body)` | 更新/删除节点 |
+| `exportCanvas(body)` / `listExports()` / `stopExport(nodeId)` | 画布合成导出 |
+| `serverStatus()` / `serverConfig()` | ZLMediaKit 状态/上游配置 |
+| `applyServerConfig()` / `restartServer()` | 应用端口与录制配置/重启 |
+| `streamStatus(app, stream)` | 单流在线与录制状态 |
+| `prepareStream({ id })` | 确保在线并返回播放地址 |
+| `webrtcExchange(app, stream, offer)` | WebRTC offer/answer 交换 |
+| `listRecordings(filter)` / `syncRecordings(body)` / `pruneRecordings(options)` | 录像查询/同步/保留清理 |
+| `record(action, app, stream)` | 开始/停止录制 |
+| `callZlm(method, fields)` | 直接调用任意 ZLMediaKit HTTP API，返回 `data`，非 0 返回码抛错 |
+| `zlm(method, params)` | 直接调用任意 ZLMediaKit HTTP API，返回完整 `{code,msg,data}` 包络（推荐） |
+
+### 模型工具（18 个）
+
+`list_media_streams`、`add_media_stream`、`manage_media_node`、`list_media_recordings`、`prune_media_recordings`、`get_media_settings`、`update_media_settings`、`get_media_stream_status`、`open_media_stream`、`record_media_stream`、`get_media_server_status`、`apply_media_server_config`、`restart_media_server`、`export_media_canvas`、`stop_media_export`、`list_media_exports`、`call_zlm_api`、`zlm_api`。
 
 ## 说明
 

@@ -14,11 +14,12 @@
  * @module dsh-media
  */
 
-import { access, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { execFile } from 'node:child_process'
+import { Service } from '@deepseek-ai/cordis'
+import { execFile, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
@@ -61,8 +62,11 @@ export const Config = z.object({
   recordEnabled: z.boolean().default(true).description('Record every stream continuously for monitoring replay').volatile(),
   segmentSeconds: z.number().min(5).max(3600).default(60).description('MP4 segment length in seconds').volatile(),
   recordLocalDir: z.string().default('').description('Local recording directory; empty uses $DSH_HOME/dsh-media/recordings').volatile(),
+  retentionHours: z.number().min(0).max(87600).default(168).description('Hours to keep recordings; 0 keeps them forever').volatile(),
+  cleanRawRecordings: z.boolean().default(true).description('Delete ZLMediaKit raw recording days older than the retention window').volatile(),
   recordPath: z.string().default('./www').description('ZLMediaKit MP4 save path').volatile(),
   recordApp: z.string().default('record').description('ZLMediaKit recording app name').volatile(),
+  ffmpegBin: z.string().default('').description('ffmpeg binary used to composite an exported live stream; empty uses ffmpeg from PATH').volatile(),
   manageContainer: z.boolean().default(true).description('Start the ZLMediaKit Docker container when this plugin loads and stop it when the plugin unloads').volatile(),
   containerName: z.string().default('zlmediakit').description('Docker container the plugin starts and stops').volatile(),
   composeFile: z.string().default('').description('Docker Compose file; empty uses the file shipped in the plugin package').volatile(),
@@ -166,6 +170,31 @@ function recordingIndexFile() {
 /** @returns the directory that stores recording files in local mode. */
 function localRecordingRoot(settings) {
   return settings.recordLocalDir === '' ? join(mediaHome(), 'recordings') : settings.recordLocalDir
+}
+
+/** @returns the file that remembers how each exported canvas is composed. */
+function compositionFile() {
+  return join(mediaHome(), 'compositions.json')
+}
+
+/** @returns the remembered composition recipes keyed by catalog node id. */
+async function readCompositions() {
+  try {
+    const text = await readFile(compositionFile(), 'utf8')
+    const parsed = JSON.parse(text)
+    return isRecord(parsed) && isRecord(parsed.compositions) ? parsed.compositions : {}
+  } catch (_missingCompositions) {
+    return {}
+  }
+}
+
+/** Persist the composition recipes so a restarted Host restores its exported streams. */
+async function writeCompositions(compositions) {
+  const file = compositionFile()
+  await mkdir(dirname(file), { recursive: true })
+  const temporary = `${file}.tmp`
+  await writeFile(temporary, `${JSON.stringify({ compositions }, null, 2)}\n`, 'utf8')
+  await rename(temporary, file)
 }
 
 /** Project one PostgreSQL catalog row into the node object the page consumes. */
@@ -462,6 +491,30 @@ function createRecordingIndex(ctx) {
           ON CONFLICT (id) DO NOTHING
         `, [item.id, item.app, item.stream, item.fileName, item.day, item.startTime, item.durationSeconds, item.sizeBytes, item.storage, item.objectKey, item.localPath])
       },
+      async olderThan(cutoffIso, limit = 500, filter = {}) {
+        await ensureTable()
+        const values = [cutoffIso]
+        const clauses = ['start_time < $1']
+        if (filter.app !== undefined && filter.app !== '') {
+          values.push(filter.app)
+          clauses.push(`app = $${String(values.length)}`)
+        }
+        if (filter.stream !== undefined && filter.stream !== '') {
+          values.push(filter.stream)
+          clauses.push(`stream = $${String(values.length)}`)
+        }
+        values.push(limit)
+        const result = await database.query(
+          `SELECT * FROM ${RECORDING_TABLE} WHERE ${clauses.join(' AND ')} ORDER BY start_time ASC LIMIT $${String(values.length)}`,
+          values,
+        )
+        return result.rows.map(pgRecording)
+      },
+      async remove(ids) {
+        if (ids.length === 0) return
+        await ensureTable()
+        await database.query(`DELETE FROM ${RECORDING_TABLE} WHERE id = ANY($1::text[])`, [ids])
+      },
     }
   }
 
@@ -503,6 +556,26 @@ function createRecordingIndex(ctx) {
         const items = await load()
         if (items.some(candidate => candidate.id === item.id)) return
         items.push(item)
+        await persist(items)
+      })
+      queue = run.then(() => {}, () => {})
+      return run
+    },
+    async olderThan(cutoffIso, limit = 500, filter = {}) {
+      await queue.catch(() => {})
+      const cutoff = Date.parse(cutoffIso)
+      return (await load())
+        .filter(item => Date.parse(item.startTime) < cutoff
+          && (filter.app === undefined || filter.app === '' || item.app === filter.app)
+          && (filter.stream === undefined || filter.stream === '' || item.stream === filter.stream))
+        .sort((left, right) => Date.parse(left.startTime) - Date.parse(right.startTime))
+        .slice(0, limit)
+    },
+    async remove(ids) {
+      if (ids.length === 0) return
+      const removing = new Set(ids)
+      const run = queue.then(async () => {
+        const items = (await load()).filter(item => !removing.has(item.id))
         await persist(items)
       })
       queue = run.then(() => {}, () => {})
@@ -652,8 +725,12 @@ function settingsOf(config) {
     recordEnabled: config.recordEnabled.get(),
     segmentSeconds: config.segmentSeconds.get(),
     recordLocalDir: config.recordLocalDir.get().trim(),
+    retentionHours: config.retentionHours.get(),
+    cleanRawRecordings: config.cleanRawRecordings.get(),
     recordPath: config.recordPath.get(),
     recordApp: config.recordApp.get().trim() === '' ? 'record' : config.recordApp.get().trim(),
+    ffmpegBin: config.ffmpegBin.get().trim(),
+    containerName: config.containerName.get().trim(),
   }
 }
 
@@ -694,9 +771,26 @@ function requireSecret(settings) {
  * Call one ZLMediaKit HTTP API method.
  * @returns the decoded `data` payload; undefined when the response carries none.
  */
-async function zlmCall(settings, method, fields = {}) {
+/** @returns ZLMediaKit form fields with booleans, numbers, and objects encoded as text. */
+function zlmFields(fields = {}) {
+  const params = {}
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null) continue
+    if (typeof value === 'boolean') params[key] = value ? '1' : '0'
+    else if (typeof value === 'object') params[key] = JSON.stringify(value)
+    else params[key] = String(value)
+  }
+  return params
+}
+
+/**
+ * POST one ZLMediaKit API method and return its full `{ code, msg, data }` envelope.
+ * A non-zero API code is returned to the caller rather than thrown so callers can
+ * inspect arbitrary API results; transport and decoding failures still throw.
+ */
+async function zlmRequest(settings, method, fields = {}) {
   requireHost(settings)
-  const params = { ...fields }
+  const params = zlmFields(fields)
   // ZLMediaKit skips the secret for loopback callers; sending an empty one is a refused login.
   if (settings.secret !== '') params.secret = settings.secret
   const body = new URLSearchParams(params)
@@ -706,7 +800,7 @@ async function zlmCall(settings, method, fields = {}) {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(30000),
     })
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
@@ -719,9 +813,242 @@ async function zlmCall(settings, method, fields = {}) {
     throw new MediaError('media-unavailable', `ZLMediaKit returned HTTP ${String(response.status)}`, 503)
   }
   if (!isRecord(payload)) throw new MediaError('media-unavailable', 'ZLMediaKit returned an unexpected response', 503)
+  return payload
+}
+
+async function zlmCall(settings, method, fields = {}) {
+  const payload = await zlmRequest(settings, method, fields)
   if (payload.code === 0) return payload.data
   const message = typeof payload.msg === 'string' && payload.msg !== '' ? payload.msg : `ZLMediaKit ${method} failed`
   throw new MediaError('media-unavailable', message, 503)
+}
+
+/** @returns an even canvas size for one aspect ratio. */
+function canvasSize(aspect) {
+  if (aspect === '4:3') return { width: 1440, height: 1080 }
+  if (aspect === '1:1') return { width: 1080, height: 1080 }
+  if (aspect === '9:16') return { width: 1080, height: 1920 }
+  if (aspect === '9:19.5') return { width: 1080, height: 2340 }
+  if (aspect === '9:20') return { width: 1080, height: 2400 }
+  return { width: 1920, height: 1080 }
+}
+
+/** @returns the value rounded down to an even number, so x264 accepts the frame size. */
+function even(value) {
+  const rounded = Math.max(2, Math.round(value))
+  return rounded % 2 === 0 ? rounded : rounded - 1
+}
+
+/** Run one process and resolve with its output; a non-zero exit rejects with the last error lines. */
+function runProcess(command, args, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error !== null) {
+        const detail = (stderr || stdout || error.message).trim().split('\n').slice(-3).join(' ')
+        reject(new Error(detail === '' ? error.message : detail))
+        return
+      }
+      resolve({ stdout, stderr })
+    })
+  })
+}
+
+/** Cached ffmpeg choice: probing once keeps repeated exports cheap. */
+let ffmpegProbe
+
+/**
+ * @returns the ffmpeg command and leading arguments.
+ * The ffmpeg builds on this machine differ: only one of them ships libx264,
+ * so the choice is probed instead of trusting `ffmpeg` from PATH.
+ */
+async function resolveFfmpeg(settings) {
+  const configured = settings.ffmpegBin.trim()
+  if (configured !== '') return { command: configured, prefix: [] }
+  if (ffmpegProbe === undefined) {
+    ffmpegProbe = (async () => {
+      for (const candidate of ['ffmpeg', '/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg']) {
+        try {
+          const output = await runProcess(candidate, ['-hide_banner', '-encoders'], 10000)
+          if (/libx264|h264_nvenc/.test(output.stdout)) return { command: candidate, prefix: [] }
+        } catch (_candidateMissing) {
+          // Try the next candidate.
+        }
+      }
+      // Last resort: the ffmpeg inside the ZLMediaKit container always ships libx264.
+      const container = settings.containerName.trim() === '' ? 'zlmediakit' : settings.containerName.trim()
+      return { command: 'docker', prefix: ['exec', '-i', container, 'ffmpeg'] }
+    })()
+  }
+  return ffmpegProbe
+}
+
+/** Scale-and-crop one input onto an exact box, keeping its aspect ratio. */
+function coverFilter(input, width, height, label) {
+  return `[${String(input)}:v]scale=${String(width)}:${String(height)}:force_original_aspect_ratio=increase,crop=${String(width)}:${String(height)}[${label}]`
+}
+
+/** Crop shapes a canvas tile may use; anything else falls back to a plain rectangle. */
+const CROP_SHAPES = new Set(['rect', 'roundRect', 'circle', 'ellipse', 'triangle', 'diamond'])
+
+/** @returns the crop windows of one tile as 0..1 fractions, clamped and limited to three. */
+function normalizeCrops(value) {
+  if (!Array.isArray(value)) return []
+  const crops = []
+  for (const item of value.slice(0, 3)) {
+    if (!isRecord(item)) continue
+    const shape = typeof item.shape === 'string' && CROP_SHAPES.has(item.shape) ? item.shape : 'rect'
+    // The page sends percentages; the compositor works in fractions of the tile.
+    const x = Math.min(1, Math.max(0, (Number(item.x) || 0) / 100))
+    const y = Math.min(1, Math.max(0, (Number(item.y) || 0) / 100))
+    const w = Math.min(1 - x, Math.max(0.02, (Number(item.w) || 0) / 100))
+    const h = Math.min(1 - y, Math.max(0.02, (Number(item.h) || 0) / 100))
+    if (w <= 0 || h <= 0) continue
+    crops.push({ shape, x, y, w, h })
+  }
+  return crops
+}
+
+/** @returns a geq alpha expression that keeps pixels inside one crop shape opaque. */
+function cropAlphaExpression(crop, width, height) {
+  const x0 = Number((crop.x * width).toFixed(1))
+  const y0 = Number((crop.y * height).toFixed(1))
+  const w = Math.max(2, Number((crop.w * width).toFixed(1)))
+  const h = Math.max(2, Number((crop.h * height).toFixed(1)))
+  const cx = Number((x0 + w / 2).toFixed(1))
+  const cy = Number((y0 + h / 2).toFixed(1))
+  const shape = crop.shape
+  if (shape === 'circle') {
+    const radius = Number((Math.min(w, h) / 2).toFixed(1))
+    return `clip((${String(radius)}-sqrt((X-${String(cx)})*(X-${String(cx)})+(Y-${String(cy)})*(Y-${String(cy)})))*255,0,255)`
+  }
+  if (shape === 'ellipse') {
+    const rx = Number((w / 2).toFixed(1))
+    const ry = Number((h / 2).toFixed(1))
+    const softness = Number((Math.min(w, h) / 2).toFixed(1))
+    return `clip((1-sqrt(((X-${String(cx)})/${String(rx)})*((X-${String(cx)})/${String(rx)})+((Y-${String(cy)})/${String(ry)})*((Y-${String(cy)})/${String(ry)})))*${String(softness)}*255,0,255)`
+  }
+  if (shape === 'roundRect') {
+    const radius = Number((Math.min(w, h) * 0.18).toFixed(1))
+    const left = Number((x0 + radius).toFixed(1))
+    const right = Number((x0 + w - radius).toFixed(1))
+    const top = Number((y0 + radius).toFixed(1))
+    const bottom = Number((y0 + h - radius).toFixed(1))
+    const dx = `(max(${String(left)}-X,0)+max(X-${String(right)},0))`
+    const dy = `(max(${String(top)}-Y,0)+max(Y-${String(bottom)},0))`
+    return `clip((0-(sqrt((${dx})*(${dx})+(${dy})*(${dy}))-${String(radius)}))*255,0,255)`
+  }
+  if (shape === 'triangle') {
+    const slope = Number((w / 2 / h).toFixed(4))
+    return `clip((((Y-${String(y0)})*${String(slope)})-abs(X-${String(cx)}))*255,0,255)`
+  }
+  if (shape === 'diamond') {
+    const softness = Number((Math.min(w, h) / 2).toFixed(1))
+    const halfW = Number((w / 2).toFixed(1))
+    const halfH = Number((h / 2).toFixed(1))
+    return `clip((1-(abs(X-${String(cx)})/${String(halfW)}+abs(Y-${String(cy)})/${String(halfH)}))*${String(softness)}*255,0,255)`
+  }
+  // Plain rectangle: distance to the nearest edge, so inside stays opaque.
+  const dx = `min(X-${String(x0)},${String(Number((x0 + w).toFixed(1)))}-X)`
+  const dy = `min(Y-${String(y0)},${String(Number((y0 + h).toFixed(1)))}-Y)`
+  return `clip((min(${dx},${dy})+1)*255,0,255)`
+}
+
+/** @returns the union alpha expression for every crop of one tile, or undefined when uncropped. */
+function cropMaskExpression(crops, width, height) {
+  const shapes = crops.filter(crop => isRecord(crop) && typeof crop.shape === 'string')
+  if (shapes.length === 0) return undefined
+  const expressions = shapes.map(crop => cropAlphaExpression(crop, width, height))
+  // ffmpeg's `max` takes exactly two arguments, so the union is nested.
+  return expressions.reduce((left, right) => `max(${left},${right})`)
+}
+
+/**
+ * @returns whether the stream behind one compositor item carries audio.
+ * Recipes saved by an older version have no `hasAudio`, so it is probed from ZLMediaKit.
+ */
+async function tileHasAudio(settings, item) {
+  if (typeof item.hasAudio === 'boolean') return item.hasAudio
+  const match = /^rtsp:\/\/[^/]+\/([^/]+)\/([^/?#]+)/.exec(item.rtsp)
+  if (match === null) return false
+  const entry = await mediaEntry(settings, decodeURIComponent(match[1]), decodeURIComponent(match[2]))
+  return entry !== undefined && Array.isArray(entry.tracks) && entry.tracks.some(track => isRecord(track) && track.codec_type === 1)
+}
+
+/**
+ * Compose the canvas with ffmpeg and publish it back to ZLMediaKit over RTMP.
+ * VideoStack only lays streams out on a grid and crashes on overlapping cells,
+ * so a background plus a small window has to be composited by ffmpeg.
+ */
+async function startCompositor(settings, stream, tiles) {
+  const canvas = tiles.canvas
+  // Older saved recipes lack `volume` and `hasAudio`; fill them in before using the items.
+  const items = []
+  for (const item of tiles.items) {
+    items.push({
+      ...item,
+      volume: Number.isFinite(item.volume) ? item.volume : 100,
+      hasAudio: await tileHasAudio(settings, item),
+    })
+  }
+  const args = ['-hide_banner', '-loglevel', 'warning', '-nostdin', '-re']
+  args.push('-f', 'lavfi', '-i', `color=c=0x141414:s=${String(canvas.width)}x${String(canvas.height)}:r=25`)
+  for (const tile of items) {
+    args.push('-thread_queue_size', '1024', '-rtsp_transport', 'tcp', '-i', tile.rtsp)
+  }
+  const filters = []
+  let current = '0:v'
+  let audioCount = 0
+  items.forEach((tile, index) => {
+    const scaled = `o${String(index)}`
+    const next = `s${String(index)}`
+    filters.push(coverFilter(index + 1, tile.width, tile.height, scaled))
+    // A cropped tile keeps only the pixels inside its crop shapes; the rest turns transparent.
+    const mask = Array.isArray(tile.crops) ? cropMaskExpression(tile.crops, tile.width, tile.height) : undefined
+    let source = scaled
+    if (mask !== undefined) {
+      const masked = `m${String(index)}`
+      filters.push(`[${scaled}]format=yuva420p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='${mask}'[${masked}]`)
+      source = masked
+    }
+    filters.push(`[${current}][${source}]overlay=${String(tile.x)}:${String(tile.y)}:shortest=1[${next}]`)
+    current = next
+    // Every source with a volume above zero joins the mix; 0 mutes it.
+    if (tile.volume > 0 && tile.hasAudio === true) {
+      filters.push(`[${String(index + 1)}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${String(Number((tile.volume / 100).toFixed(2)))}[a${String(audioCount)}]`)
+      audioCount += 1
+    }
+  })
+  if (audioCount > 0) {
+    const labels = Array.from({ length: audioCount }, (_unused, index) => `[a${String(index)}]`).join('')
+    // amix keeps every source audible; normalize=0 preserves the per-source levels.
+    filters.push(`${labels}amix=inputs=${String(audioCount)}:duration=longest:normalize=0[aout]`)
+  }
+  args.push('-filter_complex', filters.join(';'))
+  args.push('-map', `[${current}]`)
+  if (audioCount === 0) {
+    args.push('-an')
+  } else {
+    args.push('-map', '[aout]')
+    args.push('-c:a', 'aac', '-b:a', '128k', '-ar', '44100')
+  }
+  args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-pix_fmt', 'yuv420p')
+  args.push('-b:v', '3000k', '-maxrate', '3500k', '-bufsize', '6000k', '-g', '50', '-r', '25')
+  args.push('-f', 'flv', `rtmp://${settings.host}:${String(settings.rtmpPort)}/${ZLM_APP}/${stream}`)
+  const ffmpeg = await resolveFfmpeg(settings)
+  const child = spawn(ffmpeg.command, [...ffmpeg.prefix, ...args], { stdio: ['ignore', 'ignore', 'pipe'] })
+  const errors = []
+  child.stderr.on('data', (chunk) => {
+    errors.push(String(chunk))
+    if (errors.length > 40) errors.shift()
+  })
+  const exited = await Promise.race([
+    new Promise((resolve) => { child.once('exit', code => resolve(code)) }),
+    sleep(1800).then(() => undefined),
+  ])
+  if (exited !== undefined) {
+    throw new MediaError('media-unavailable', `ffmpeg could not compose the canvas: ${errors.join('').trim().split('\n').slice(-2).join(' ')}`, 503)
+  }
+  return child
 }
 
 /** @returns the media entries ZLMediaKit reports for one stream. */
@@ -890,6 +1217,106 @@ function sleep(ms) {
 }
 
 /**
+ * Public Host API of the streaming-media plugin.
+ *
+ * Every capability the page, the agent tools, and other plugins use goes
+ * through this service, so one implementation backs all callers.
+ */
+export class MediaServerService extends Service {
+  /**
+   * @param ctx - Host context owning the service.
+   * @param config - Live plugin configuration.
+   */
+  constructor(ctx, config) {
+    super(ctx, 'mediaServer')
+    this.config = config
+    /** @type {Record<string, Function> | undefined} */
+    this.impl = undefined
+  }
+
+  /** @returns a bound implementation, or a clear failure when the plugin is still activating. */
+  implementation() {
+    if (this.impl === undefined) {
+      throw new MediaError('service-not-ready', 'The streaming-media service is still activating', 503)
+    }
+    return this.impl
+  }
+
+  /** @returns every catalog node, sorted folders-first. */
+  tree() { return this.implementation().tree() }
+
+  /** @returns the public plugin settings, including storage mode. */
+  settings() { return this.implementation().settings() }
+
+  /** @param patch - writable settings fields. @returns the updated settings. */
+  updateSettings(patch) { return this.implementation().updateSettings(patch) }
+
+  /** @param body - folder fields. @returns the created node. */
+  createFolder(body) { return this.implementation().createFolder(body) }
+
+  /** @param body - stream fields. @returns the created node. */
+  createStream(body) { return this.implementation().createStream(body) }
+
+  /** @param body - node id and patch. @returns the updated node. */
+  updateNode(body) { return this.implementation().updateNode(body) }
+
+  /** @param body - node id. @returns the removed nodes. */
+  deleteNode(body) { return this.implementation().deleteNode(body) }
+
+  /** @param body - canvas layout and tiles. @returns the exported stream node. */
+  exportCanvas(body) { return this.implementation().exportCanvas(body) }
+
+  /** @returns the remembered canvas exports, one entry per catalog node id. */
+  listExports() { return this.implementation().listExports() }
+
+  /** @param nodeId - catalog node that owns an exported canvas. */
+  stopExport(nodeId) { return this.implementation().stopExport(nodeId) }
+
+  /** @returns ZLMediaKit reachability, version, effective ports, and recording flags. */
+  serverStatus() { return this.implementation().serverStatus() }
+
+  /** @returns the changed keys after writing the plugin configuration into ZLMediaKit. */
+  applyServerConfig() { return this.implementation().applyServerConfig() }
+
+  /** @returns the ZLMediaKit version after a restart. */
+  restartServer() { return this.implementation().restartServer() }
+
+  /** @returns the ZLMediaKit upstream configuration map. */
+  serverConfig() { return this.implementation().serverConfig() }
+
+  /** @param app - ZLMediaKit app. @param stream - stream id. @returns live stream status. */
+  streamStatus(app, stream) { return this.implementation().streamStatus(app, stream) }
+
+  /** @param body - catalog node id. @returns playback addresses and status. */
+  prepareStream(body) { return this.implementation().prepareStream(body) }
+
+  /** @param app - ZLMediaKit app. @param stream - stream id. @param offer - SDP offer. @returns the SDP answer. */
+  webrtcExchange(app, stream, offer) { return this.implementation().webrtcExchange(app, stream, offer) }
+
+  /** @param filter - app, stream, and/or day. @returns stored recordings with play/download URLs. */
+  listRecordings(filter) { return this.implementation().listRecordings(filter) }
+
+  /** @param body - nodeId and/or day. @returns ingested recordings. */
+  syncRecordings(body) { return this.implementation().syncRecordings(body) }
+
+  /** @param options - filter, retentionHours, dryRun. @returns prune results. */
+  pruneRecordings(options) { return this.implementation().pruneRecordings(options) }
+
+  /** @param action - start or stop. @param app - ZLMediaKit app. @param stream - stream id. @returns recording state. */
+  record(action, app, stream) { return this.implementation().record(action, app, stream) }
+
+  /** @param method - ZLMediaKit API method. @param fields - API parameters. @returns the decoded data payload. */
+  callZlm(method, fields) { return this.implementation().callZlm(method, fields) }
+
+  /**
+   * @param method - ZLMediaKit API method.
+   * @param fields - API parameters as a JSON object.
+   * @returns the full `{ code, msg, data }` envelope; a non-zero API code is not thrown.
+   */
+  zlm(method, fields) { return this.implementation().zlm(method, fields) }
+}
+
+/**
  * Register the media service routes and tools.
  * @param ctx - Host context.
  * @param config - Resolved plugin configuration.
@@ -900,6 +1327,75 @@ export function apply(ctx, config) {
   ctx.effect(() => () => { if (container.enabled) void stopManagedContainer(ctx, container) }, 'dsh-media: ZLMediaKit container lifecycle')
   const catalog = createCatalogProvider(ctx)
   const recordingsIndex = createRecordingIndex(ctx)
+  const service = new MediaServerService(ctx, config)
+  /** ffmpeg compositors keyed by catalog node id; each one publishes one exported stream. */
+  const compositions = new Map()
+  /** Composition recipes keyed by catalog node id, so a restart can resume exported streams. */
+  let recipes = {}
+  /** Last failed start per node id, so the watchdog retries with a backoff instead of spamming. */
+  const failures = new Map()
+
+  /** Start the compositor for one remembered recipe; failures stay silent for the watchdog. */
+  function composeRecipe(nodeId, recipe) {
+    if (compositions.has(nodeId)) return
+    const settings = liveSettings()
+    startCompositor(settings, recipe.stream, { canvas: recipe.canvas, items: recipe.items })
+      .then((child) => {
+        failures.delete(nodeId)
+        compositions.set(nodeId, child)
+        child.once('exit', () => {
+          if (compositions.get(nodeId) === child) compositions.delete(nodeId)
+        })
+      })
+      .catch((error) => {
+        failures.set(nodeId, Date.now())
+        ctx.logger.warn('dsh-media: composing %s failed: %s', recipe.stream, error instanceof Error ? error.message : String(error))
+      })
+  }
+
+  const stopComposition = (nodeId) => {
+    const child = compositions.get(nodeId)
+    compositions.delete(nodeId)
+    failures.delete(nodeId)
+    if (child !== undefined) child.kill('SIGKILL')
+    if (recipes[nodeId] !== undefined) {
+      delete recipes[nodeId]
+      void writeCompositions(recipes).catch(() => {})
+    }
+  }
+  ctx.effect(() => () => { for (const child of compositions.values()) child.kill('SIGKILL') }, 'dsh-media: canvas compositors')
+  ctx.effect(() => {
+    let alive = true
+    void readCompositions().then((saved) => {
+      if (!alive) return
+      recipes = saved
+      return catalog.tree().then((savedNodes) => {
+        if (!alive) return
+        const known = new Set(savedNodes.filter(node => node.kind === 'stream').map(node => node.id))
+        let pruned = false
+        for (const [nodeId, recipe] of Object.entries(recipes)) {
+          if (!known.has(nodeId)) {
+            // The catalog node is gone, so its exported stream must not be resumed.
+            delete recipes[nodeId]
+            pruned = true
+            continue
+          }
+          if (isRecord(recipe) && typeof recipe.stream === 'string') composeRecipe(nodeId, recipe)
+        }
+        if (pruned) void writeCompositions(recipes).catch(() => {})
+      })
+    })
+    // A compositor dies when ZLMediaKit restarts; the watchdog puts it back.
+    const watchdog = setInterval(() => {
+      for (const [nodeId, recipe] of Object.entries(recipes)) {
+        if (!isRecord(recipe) || typeof recipe.stream !== 'string' || compositions.has(nodeId)) continue
+        const lastFailure = failures.get(nodeId)
+        if (lastFailure !== undefined && Date.now() - lastFailure < 30000) continue
+        composeRecipe(nodeId, recipe)
+      }
+    }, 15000)
+    return () => { alive = false; clearInterval(watchdog) }
+  }, 'dsh-media: exported canvas compositors')
   ctx.effect(() => {
     if (config.zlmSecret.get() !== '') {
       void applyServerConfig().catch((error) => {
@@ -962,6 +1458,15 @@ export function apply(ctx, config) {
       patch.segmentSeconds = segment
     }
     if (body.recordLocalDir !== undefined) patch.recordLocalDir = optionalText(body.recordLocalDir, 'Local recording directory', MAX_PATH)
+    if (body.retentionHours !== undefined) {
+      const retention = Number(body.retentionHours)
+      if (!Number.isInteger(retention) || retention < 0 || retention > 87600) throw new MediaError('invalid-input', 'Retention hours must be an integer from 0 to 87600', 400)
+      patch.retentionHours = retention
+    }
+    if (body.cleanRawRecordings !== undefined) {
+      if (typeof body.cleanRawRecordings !== 'boolean') throw new MediaError('invalid-input', 'Raw recording cleanup must be a boolean', 400)
+      patch.cleanRawRecordings = body.cleanRawRecordings
+    }
     if (body.recordPath !== undefined) patch.recordPath = requiredText(body.recordPath, 'Record path', MAX_PATH)
     if (body.recordApp !== undefined) patch.recordApp = requiredIdentifier(body.recordApp, 'Record app', MAX_APP)
     return patch
@@ -981,8 +1486,11 @@ export function apply(ctx, config) {
         recordEnabled: current.recordEnabled,
         segmentSeconds: current.segmentSeconds,
         recordLocalDir: current.recordLocalDir,
+        retentionHours: current.retentionHours,
+        cleanRawRecordings: current.cleanRawRecordings,
         recordPath: current.recordPath,
         recordApp: current.recordApp,
+        ffmpegBin: current.ffmpegBin,
       },
       secretSet: current.secret !== '',
       catalogFile: catalog.mode === 'postgres' ? `${NODE_TABLE} (PostgreSQL)` : catalogFile(),
@@ -1014,6 +1522,75 @@ export function apply(ctx, config) {
     })
   }
 
+  /** Canvas aspect ratios mapped onto an even-sized composite output. */
+  function stackLayout(aspect) {
+    return canvasSize(aspect)
+  }
+
+  /** Publish the canvas as one composited ZLMediaKit stream and add it to the catalog. */
+  async function exportCanvas(body) {
+    const name = requiredText(body.name, 'Stream name', MAX_NAME)
+    const description = optionalText(body.description, 'Description', MAX_DESCRIPTION)
+    const parentId = body.parentId === null || body.parentId === undefined ? null : String(body.parentId)
+    // An empty id is generated; a supplied one must pass the same rules as a new stream.
+    const requestedStream = body.stream === undefined || body.stream === null || body.stream === '' ? '' : requiredIdentifier(body.stream, 'Stream id', MAX_STREAM)
+    const layout = stackLayout(typeof body.aspect === 'string' ? body.aspect : '16:9')
+    const tiles = Array.isArray(body.tiles) ? body.tiles : []
+    if (tiles.length === 0) throw new MediaError('invalid-input', 'Put at least one stream on the canvas', 400)
+    const settings = liveSettings()
+    const nodes = await catalog.tree()
+    // Tiles keep their exact canvas position: the compositor overlays them, so
+    // they may overlap (a background with a small window on top).
+    const items = []
+    for (const tile of tiles) {
+      if (!isRecord(tile)) continue
+      const source = nodes.find(node => node.id === String(tile.nodeId) && node.kind === 'stream')
+      if (source === undefined) throw new MediaError('not-found', 'A canvas stream was not found', 404)
+      // The compositor pulls each source from ZLMediaKit, so every source must be online.
+      const entry = await mediaEntry(settings, source.app, source.stream)
+      if (entry === undefined) {
+        throw new MediaError('media-unavailable', `The stream ${source.app}/${source.stream} is offline; start it before exporting`, 409)
+      }
+      const hasAudio = Array.isArray(entry.tracks) && entry.tracks.some(track => isRecord(track) && track.codec_type === 1)
+      const x = Math.min(96, Math.max(0, Number(tile.x) || 0))
+      const y = Math.min(96, Math.max(0, Number(tile.y) || 0))
+      const w = Math.min(100 - x, Math.max(4, Number(tile.w) || 0))
+      const h = Math.min(100 - y, Math.max(4, Number(tile.h) || 0))
+      items.push({
+        rtsp: `rtsp://${settings.host}:${String(settings.rtspPort)}/${source.app}/${source.stream}`,
+        x: even(Math.round(x / 100 * layout.width)),
+        y: even(Math.round(y / 100 * layout.height)),
+        width: even(Math.round(w / 100 * layout.width)),
+        height: even(Math.round(h / 100 * layout.height)),
+        volume: Math.min(200, Math.max(0, Math.round(Number(tile.volume ?? 100)))),
+        hasAudio,
+        crops: normalizeCrops(tile.crops),
+      })
+    }
+    if (items.length === 0) throw new MediaError('invalid-input', 'Put at least one stream on the canvas', 400)
+    // Paint order is the canvas z-order: the last tile overlays the earlier ones.
+    const stream = requestedStream === '' ? defaultStreamName() : requestedStream
+    const duplicate = nodes.find(node => node.kind === 'stream' && node.app === ZLM_APP && node.stream === stream)
+    if (duplicate !== undefined) throw new MediaError('duplicate-stream', `Stream ${ZLM_APP}/${stream} is already in the catalog`, 409)
+    const compositor = await startCompositor(settings, stream, { canvas: layout, items })
+    const now = new Date().toISOString()
+    try {
+      const node = await catalog.createStream({
+        id: randomUUID(), parentId, kind: 'stream', name, app: ZLM_APP, stream, sourceUrl: '', description, createdAt: now, updatedAt: now,
+      })
+      compositions.set(node.id, compositor)
+      compositor.once('exit', () => {
+        if (compositions.get(node.id) === compositor) compositions.delete(node.id)
+      })
+      recipes[node.id] = { stream, canvas: layout, items }
+      await writeCompositions(recipes).catch(() => {})
+      return node
+    } catch (error) {
+      compositor.kill('SIGKILL')
+      throw error
+    }
+  }
+
   /** Update one node's writable fields. */
   async function updateNode(body) {
     const id = requiredText(body.id, 'Node id', 128)
@@ -1038,6 +1615,7 @@ export function apply(ctx, config) {
     const settings = liveSettings()
     const removed = await catalog.deleteNode(id)
     for (const node of removed) {
+      stopComposition(node.id)
       if (node.kind === 'stream' && node.sourceUrl !== '') await dropProxy(settings, node)
     }
     return removed.map(projectNode)
@@ -1146,6 +1724,73 @@ export function apply(ctx, config) {
     return added
   }
 
+  /** Delete stored recordings older than the retention window; a filter limits the scope. */
+  async function pruneRecordings(options = {}) {
+    const settings = liveSettings()
+    const retention = options.retentionHours === undefined ? settings.retentionHours : options.retentionHours
+    if (retention <= 0) return { removed: 0, ids: [] }
+    const filter = options.filter === undefined ? {} : options.filter
+    const cutoff = new Date(Date.now() - retention * 3600 * 1000).toISOString()
+    const items = await recordingsIndex.olderThan(cutoff, 500, filter)
+    if (items.length === 0) return 0
+    const database = databaseOf(ctx)
+    const minioKeys = items.filter(item => item.storage === 'minio' && item.objectKey !== '').map(item => item.objectKey)
+    if (database !== undefined && minioKeys.length > 0) {
+      try {
+        const bucket = database.minio().bucket
+        await database.withMinio(client => client.removeObjects(bucket, minioKeys))
+      } catch (error) {
+        ctx.logger.warn('dsh-media: deleting expired MinIO recordings failed: %s', error instanceof Error ? error.message : String(error))
+      }
+    }
+    for (const item of items) {
+      if (item.storage !== 'local' || item.localPath === '') continue
+      try {
+        await unlink(item.localPath)
+      } catch (error) {
+        const missing = error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'
+        if (!missing) ctx.logger.warn('dsh-media: deleting expired recording %s failed: %s', item.localPath, error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (options.dryRun === true) return { removed: 0, ids: items.map(item => item.id), cutoff }
+    await recordingsIndex.remove(items.map(item => item.id))
+    ctx.logger.info('dsh-media: removed %d recordings older than %s', items.length, cutoff)
+    return { removed: items.length, ids: items.map(item => item.id), cutoff }
+  }
+
+  /** Delete ZLMediaKit raw recording days older than the retention window. */
+  async function pruneRawRecordings(settings, cutoffIso) {
+    if (!settings.cleanRawRecordings || settings.secret === '') return
+    const cutoffDay = cutoffIso.slice(0, 10)
+    for (const node of (await catalog.tree()).filter(node => node.kind === 'stream')) {
+      let days = []
+      try {
+        const data = await zlmCall(settings, 'getMp4RecordFile', {
+          vhost: ZLM_VHOST, app: node.app, stream: node.stream, period: '',
+        })
+        days = isRecord(data) && Array.isArray(data.paths)
+          ? data.paths.filter(day => /^\d{4}-\d{2}-\d{2}$/.test(day))
+          : []
+      } catch (error) {
+        if (!(error instanceof MediaError && /not found|no such|不存在/i.test(error.message))) {
+          ctx.logger.warn('dsh-media: listing raw recording days for %s/%s failed: %s', node.app, node.stream, error instanceof Error ? error.message : String(error))
+        }
+        continue
+      }
+      for (const day of days) {
+        if (day >= cutoffDay) continue
+        try {
+          await zlmCall(settings, 'deleteRecordDirectory', {
+            vhost: ZLM_VHOST, app: node.app, stream: node.stream, period: day,
+          })
+          ctx.logger.info('dsh-media: deleted raw recording day %s for %s/%s', day, node.app, node.stream)
+        } catch (error) {
+          ctx.logger.warn('dsh-media: deleting raw recording day %s for %s/%s failed: %s', day, node.app, node.stream, error instanceof Error ? error.message : String(error))
+        }
+      }
+    }
+  }
+
   /** Keep every catalog stream recording and ingest its finalized segments. */
   async function maintainRecordings() {
     const settings = liveSettings()
@@ -1170,6 +1815,19 @@ export function apply(ctx, config) {
         await ingestRecordings(node, today)
       } catch (error) {
         ctx.logger.warn('dsh-media: ingesting recordings for %s/%s failed: %s', node.app, node.stream, error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (settings.retentionHours > 0) {
+      const cutoff = new Date(Date.now() - settings.retentionHours * 3600 * 1000).toISOString()
+      try {
+        await pruneRecordings()
+      } catch (error) {
+        ctx.logger.warn('dsh-media: pruning stored recordings failed: %s', error instanceof Error ? error.message : String(error))
+      }
+      try {
+        await pruneRawRecordings(settings, cutoff)
+      } catch (error) {
+        ctx.logger.warn('dsh-media: pruning raw recordings failed: %s', error instanceof Error ? error.message : String(error))
       }
     }
   }
@@ -1237,6 +1895,41 @@ export function apply(ctx, config) {
     return { recordings: await listRecordings({ day }) }
   }
 
+  /** Start or stop MP4 recording for one stream. */
+  async function recordStream(action, app, stream) {
+    const settings = liveSettings()
+    requireSecret(settings)
+    const normalizedApp = requiredIdentifier(app, 'App', MAX_APP)
+    const normalizedStream = requiredIdentifier(stream, 'Stream id', MAX_STREAM)
+    if (action === 'start') {
+      try {
+        await zlmCall(settings, 'startRecord', { type: '1', vhost: ZLM_VHOST, app: normalizedApp, stream: normalizedStream })
+      } catch (error) {
+        if (!alreadyExists(error)) throw error
+      }
+      return { recording: true }
+    }
+    if (action === 'stop') {
+      await zlmCall(settings, 'stopRecord', { type: '1', vhost: ZLM_VHOST, app: normalizedApp, stream: normalizedStream }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!/not recording|no record|未录制/i.test(message)) throw error
+      })
+      return { recording: false }
+    }
+    throw new MediaError('invalid-input', 'Action must be start or stop', 400)
+  }
+
+  /** @returns the remembered canvas exports with their live state. */
+  function listExports() {
+    return Object.entries(recipes)
+      .filter(([, recipe]) => isRecord(recipe) && typeof recipe.stream === 'string')
+      .map(([nodeId, recipe]) => ({
+        nodeId,
+        stream: recipe.stream,
+        active: compositions.has(nodeId),
+      }))
+  }
+
   /** @returns one stream's live status. */
   async function streamStatus(app, stream) {
     const settings = liveSettings()
@@ -1250,8 +1943,27 @@ export function apply(ctx, config) {
       online: true,
       recording: entry.isRecordingMP4 === true,
       readers: typeof entry.totalReaderCount === 'number' ? entry.totalReaderCount : 0,
-      video: isRecord(videoTrack) ? { width: videoTrack.width, height: videoTrack.height, fps: videoTrack.fps, codec: videoTrack.codec_id_name } : null,
-      audio: isRecord(audioTrack) ? { codec: audioTrack.codec_id_name, sampleRate: audioTrack.sample_rate } : null,
+      schema: typeof entry.schema === 'string' ? entry.schema : '',
+      origin: typeof entry.originTypeStr === 'string' ? entry.originTypeStr : '',
+      aliveSecond: typeof entry.aliveSecond === 'number' ? entry.aliveSecond : 0,
+      bytesSpeed: typeof entry.bytesSpeed === 'number' ? entry.bytesSpeed : 0,
+      video: isRecord(videoTrack) ? {
+        width: videoTrack.width,
+        height: videoTrack.height,
+        fps: videoTrack.fps,
+        codec: videoTrack.codec_id_name,
+        gopSize: videoTrack.gop_size,
+        gopIntervalMs: videoTrack.gop_interval_ms,
+        frames: videoTrack.frames,
+        keyFrames: videoTrack.key_frames,
+      } : null,
+      audio: isRecord(audioTrack) ? {
+        codec: audioTrack.codec_id_name,
+        sampleRate: audioTrack.sample_rate,
+        channels: audioTrack.channels,
+        sampleBit: audioTrack.sample_bit,
+        frames: audioTrack.frames,
+      } : null,
     }
   }
 
@@ -1463,6 +2175,7 @@ export function apply(ctx, config) {
           if (body.action === 'createStream') return json({ node: projectNode(await createStream(body)), nodes: sortedNodes(await catalog.tree()) })
           if (body.action === 'update') return json({ node: projectNode(await updateNode(body)), nodes: sortedNodes(await catalog.tree()) })
           if (body.action === 'delete') return json({ removed: await deleteNode(body), nodes: sortedNodes(await catalog.tree()) })
+          if (body.action === 'exportCanvas') return json({ node: projectNode(await exportCanvas(body)), nodes: sortedNodes(await catalog.tree()) })
           throw new MediaError('invalid-input', 'Unknown node action', 400)
         }),
       },
@@ -1557,26 +2270,7 @@ export function apply(ctx, config) {
         requestBody: 'buffered',
         fetch: request => guarded(async () => {
           const body = await readJsonBody(request)
-          const settings = liveSettings()
-          requireSecret(settings)
-          const app = requiredIdentifier(body.app, 'App', MAX_APP)
-          const stream = requiredIdentifier(body.stream, 'Stream id', MAX_STREAM)
-          if (body.action === 'start') {
-            try {
-              await zlmCall(settings, 'startRecord', { type: '1', vhost: ZLM_VHOST, app, stream })
-            } catch (error) {
-              if (!alreadyExists(error)) throw error
-            }
-            return json({ recording: true })
-          }
-          if (body.action === 'stop') {
-            await zlmCall(settings, 'stopRecord', { type: '1', vhost: ZLM_VHOST, app, stream }).catch((error) => {
-              const message = error instanceof Error ? error.message : String(error)
-              if (!/not recording|no record|未录制/i.test(message)) throw error
-            })
-            return json({ recording: false })
-          }
-          throw new MediaError('invalid-input', 'Unknown record action', 400)
+          return json(await recordStream(body.action, body.app, body.stream))
         }),
       },
       {
@@ -1747,6 +2441,54 @@ export function apply(ctx, config) {
         })),
 
         child.tools.register(defineTool({
+          name: 'prune_media_recordings',
+          description: 'Delete stored recordings older than a retention window. '
+            + 'Without app/stream the call is scoped to the plugin retention setting; '
+            + 'pass olderThanHours to override it. Use dryRun to preview the match count before deleting.',
+          parameters: {
+            app: { type: 'string', description: 'Limit the prune to one ZLMediaKit app.' },
+            stream: { type: 'string', description: 'Limit the prune to one ZLMediaKit stream id.' },
+            olderThanHours: { type: 'integer', description: 'Keep recordings newer than this many hours; 0 keeps everything.' },
+            dryRun: { type: 'boolean', description: 'Only report the recordings that would be deleted.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                removed: { type: 'integer', required: true },
+                matched: { type: 'integer', required: true },
+                cutoff: { type: 'string', required: true },
+              },
+            },
+            render: (_args, value) => [{
+              type: 'text',
+              text: `Pruned ${String(value.removed)} of ${String(value.matched)} recordings older than ${value.cutoff}.`,
+            }],
+          },
+          presentCall: () => ({ card: 'generic', kind: 'delete', title: 'Prune recordings' }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const filter = {}
+            if (args.app !== undefined && args.app !== '') filter.app = requiredIdentifier(args.app, 'App', MAX_APP)
+            if (args.stream !== undefined && args.stream !== '') filter.stream = requiredIdentifier(args.stream, 'Stream id', MAX_STREAM)
+            let retention
+            if (args.olderThanHours !== undefined) {
+              const hours = Number(args.olderThanHours)
+              if (!Number.isInteger(hours) || hours < 0 || hours > 87600) throw new MediaError('invalid-input', 'olderThanHours must be 0-87600', 400)
+              retention = hours
+            }
+            const result = await pruneRecordings({
+              filter,
+              retentionHours: retention,
+              dryRun: args.dryRun === true,
+            })
+            exec.signal.throwIfAborted()
+            return { removed: result.removed, matched: result.ids.length, cutoff: result.cutoff }
+          },
+        })),
+
+        child.tools.register(defineTool({
           name: 'update_media_settings',
           description: 'Update the streaming-media plugin settings: ZLMediaKit host, HTTP port, HTTPS, API secret, '
             + 'RTSP/RTMP/WebRTC ports, and MP4 recording storage. Omit a field to keep its current value. '
@@ -1763,6 +2505,8 @@ export function apply(ctx, config) {
             recordEnabled: { type: 'boolean', description: 'Record every stream to MP4.' },
             segmentSeconds: { type: 'integer', description: 'MP4 segment length in seconds, 5-3600.' },
             recordLocalDir: { type: 'string', description: 'Local recording directory; empty uses $DSH_HOME/dsh-media/recordings.' },
+            retentionHours: { type: 'integer', description: 'Hours to keep recordings; 0 keeps them forever.' },
+            cleanRawRecordings: { type: 'boolean', description: 'Delete ZLMediaKit raw recording days older than the retention window.' },
             recordPath: { type: 'string', description: 'ZLMediaKit MP4 save path.' },
             recordApp: { type: 'string', description: 'ZLMediaKit recording app name.' },
           },
@@ -1785,8 +2529,11 @@ export function apply(ctx, config) {
                     recordEnabled: { type: 'boolean', required: true },
                     segmentSeconds: { type: 'integer', required: true },
                     recordLocalDir: { type: 'string', required: true },
+                    retentionHours: { type: 'integer', required: true },
+                    cleanRawRecordings: { type: 'boolean', required: true },
                     recordPath: { type: 'string', required: true },
                     recordApp: { type: 'string', required: true },
+                    ffmpegBin: { type: 'string', required: true },
                   },
                 },
                 secretSet: { type: 'boolean', required: true },
@@ -1796,7 +2543,7 @@ export function apply(ctx, config) {
               type: 'text',
               text: `Media settings: host=${value.settings.zlmHost}:${String(value.settings.zlmHttpPort)} https=${String(value.settings.zlmHttps)} `
                 + `secret=${value.secretSet ? 'set' : 'missing'} rtsp=${String(value.settings.rtspPort)} rtmp=${String(value.settings.rtmpPort)} `
-                + `rtc=${String(value.settings.rtcPort)} record=${String(value.settings.recordEnabled)} segment=${String(value.settings.segmentSeconds)}s app=${value.settings.recordApp} path=${value.settings.recordPath}`,
+                + `rtc=${String(value.settings.rtcPort)} record=${String(value.settings.recordEnabled)} segment=${String(value.settings.segmentSeconds)}s retention=${String(value.settings.retentionHours)}h app=${value.settings.recordApp} path=${value.settings.recordPath}`,
             }],
           },
           presentCall: () => ({ card: 'generic', kind: 'edit', title: 'Update media settings' }),
@@ -1925,28 +2672,9 @@ export function apply(ctx, config) {
           presentCall: args => ({ card: 'generic', kind: 'edit', title: `${args.action === 'start' ? 'Start' : 'Stop'} recording ${args.app}/${args.stream}` }),
           async execute(args, exec) {
             exec.signal.throwIfAborted()
-            const settings = liveSettings()
-            requireSecret(settings)
-            const app = requiredIdentifier(args.app, 'App', MAX_APP)
-            const stream = requiredIdentifier(args.stream, 'Stream id', MAX_STREAM)
-            if (args.action === 'start') {
-              try {
-                await zlmCall(settings, 'startRecord', { type: '1', vhost: ZLM_VHOST, app, stream })
-              } catch (error) {
-                if (!alreadyExists(error)) throw error
-              }
-              exec.signal.throwIfAborted()
-              return { recording: true }
-            }
-            if (args.action === 'stop') {
-              await zlmCall(settings, 'stopRecord', { type: '1', vhost: ZLM_VHOST, app, stream }).catch((error) => {
-                const message = error instanceof Error ? error.message : String(error)
-                if (!/not recording|no record|未录制/i.test(message)) throw error
-              })
-              exec.signal.throwIfAborted()
-              return { recording: false }
-            }
-            throw new MediaError('invalid-input', 'Action must be start or stop', 400)
+            const result = await recordStream(args.action, args.app, args.stream)
+            exec.signal.throwIfAborted()
+            return result
           },
         })),
 
@@ -2004,8 +2732,325 @@ export function apply(ctx, config) {
             return status.online ? { online: true } : { online: false, error: status.error }
           },
         })),
+
+        child.tools.register(defineTool({
+          name: 'manage_media_node',
+          description: 'Create a folder, update a catalog node, or delete a node (and its children). '
+            + 'Use list_media_streams first to obtain node ids. Deleting a node also stops its exported canvas and drops its pull proxy.',
+          parameters: {
+            action: { type: 'string', required: true, description: 'createFolder, update, or delete.' },
+            id: { type: 'string', description: 'Node id for update or delete.' },
+            parentId: { type: 'string', description: 'Parent folder id for createFolder; omit for the root.' },
+            name: { type: 'string', description: 'Folder or stream display name.' },
+            app: { type: 'string', description: 'ZLMediaKit app name for a stream.' },
+            stream: { type: 'string', description: 'ZLMediaKit stream id for a stream.' },
+            sourceUrl: { type: 'string', description: 'Optional source URL for a stream; an empty string clears it.' },
+            description: { type: 'string', description: 'Optional notes.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                action: { type: 'string', required: true },
+                node: { type: 'object', additionalProperties: false, properties: TOOL_NODE_PROPERTIES },
+                removed: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            render: (_args, value) => [{
+              type: 'text',
+              text: value.node !== undefined
+                ? `${value.action}: ${value.node.kind} id=${value.node.id} name=${JSON.stringify(value.node.name)}`
+                : `${value.action}: removed ${String((value.removed ?? []).length)} nodes`,
+            }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'edit', title: `Manage media node (${args.action})` }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const action = String(args.action)
+            if (action === 'createFolder') {
+              const node = await createFolder({ parentId: args.parentId, name: args.name })
+              exec.signal.throwIfAborted()
+              return { action, node: toolNode(node) }
+            }
+            if (action === 'update') {
+              const node = await updateNode({
+                id: args.id,
+                patch: { name: args.name, description: args.description, app: args.app, stream: args.stream, sourceUrl: args.sourceUrl },
+              })
+              exec.signal.throwIfAborted()
+              return { action, node: toolNode(node) }
+            }
+            if (action === 'delete') {
+              const removed = await deleteNode({ id: args.id })
+              exec.signal.throwIfAborted()
+              return { action, removed: removed.map(node => node.id) }
+            }
+            throw new MediaError('invalid-input', 'Action must be createFolder, update, or delete', 400)
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'export_media_canvas',
+          description: 'Composite several catalog streams into one exported ZLMediaKit stream and add it to the catalog. '
+            + 'Every source stream must be online. tiles is a JSON array of {nodeId, x, y, w, h, volume} where positions are percentages of the canvas.',
+          parameters: {
+            name: { type: 'string', required: true, description: 'Display name of the exported stream.' },
+            parentId: { type: 'string', description: 'Parent folder id; omit for the root.' },
+            stream: { type: 'string', description: 'Exported ZLMediaKit stream id; omit to generate one.' },
+            aspect: { type: 'string', description: 'Canvas aspect ratio such as 16:9, 4:3, or 1:1.' },
+            tiles: { type: 'string', required: true, description: 'JSON array of {nodeId,x,y,w,h,volume} tiles.' },
+            description: { type: 'string', description: 'Optional notes.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                node: { type: 'object', required: true, additionalProperties: false, properties: TOOL_NODE_PROPERTIES },
+              },
+            },
+            render: (_args, value) => [{ type: 'text', text: `Exported canvas ${value.node.app}/${value.node.stream} id=${value.node.id}` }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'edit', title: `Export canvas "${args.name}"` }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            let tiles
+            try {
+              tiles = JSON.parse(String(args.tiles))
+            } catch (_invalidTiles) {
+              throw new MediaError('invalid-input', 'tiles must be a JSON array', 400)
+            }
+            if (!Array.isArray(tiles)) throw new MediaError('invalid-input', 'tiles must be a JSON array', 400)
+            const node = await exportCanvas({
+              name: args.name, parentId: args.parentId, stream: args.stream,
+              aspect: args.aspect, tiles, description: args.description,
+            })
+            exec.signal.throwIfAborted()
+            return { node: toolNode(node) }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'stop_media_export',
+          description: 'Stop the ffmpeg compositor behind one exported canvas stream by catalog node id. '
+            + 'The catalog node stays; its stream just goes offline.',
+          parameters: {
+            nodeId: { type: 'string', required: true, description: 'Catalog node id returned by export_media_canvas.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { stopped: { type: 'boolean', required: true } },
+            },
+            render: (_args, value) => [{ type: 'text', text: value.stopped ? 'Exported canvas stopped.' : 'No active export for that node.' }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'edit', title: `Stop media export ${args.nodeId}` }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const existed = compositions.has(String(args.nodeId))
+            stopComposition(String(args.nodeId))
+            exec.signal.throwIfAborted()
+            return { stopped: existed }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'list_media_exports',
+          description: 'List remembered canvas exports with their catalog node id, exported stream, and whether the compositor is active.',
+          parameters: {},
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                exports: {
+                  type: 'array',
+                  required: true,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      nodeId: { type: 'string', required: true },
+                      stream: { type: 'string', required: true },
+                      active: { type: 'boolean', required: true },
+                    },
+                  },
+                },
+              },
+            },
+            render: (_args, value) => [{
+              type: 'text',
+              text: value.exports.length === 0
+                ? 'No canvas exports.'
+                : value.exports.map(item => `- node=${item.nodeId} stream=${item.stream} active=${String(item.active)}`).join('\n'),
+            }],
+          },
+          presentCall: () => ({ card: 'generic', kind: 'search', title: 'List media exports' }),
+          async execute(_args, exec) {
+            exec.signal.throwIfAborted()
+            const exports = listExports()
+            exec.signal.throwIfAborted()
+            return { exports }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'get_media_settings',
+          description: 'Read the streaming-media plugin settings, including the ZLMediaKit connection, ports, recording/retention configuration, and storage mode. '
+            + 'The API secret value stays in the Host; secretSet reports whether one is stored.',
+          parameters: {},
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                json: { type: 'string', required: true },
+                secretSet: { type: 'boolean', required: true },
+                storage: { type: 'string', required: true },
+              },
+            },
+            render: (_args, value) => [{ type: 'text', text: `secret=${value.secretSet ? 'set' : 'missing'} storage=${value.storage} settings=${value.json}` }],
+          },
+          presentCall: () => ({ card: 'generic', kind: 'search', title: 'Read media settings' }),
+          async execute(_args, exec) {
+            exec.signal.throwIfAborted()
+            const view = settingsView()
+            exec.signal.throwIfAborted()
+            return { json: JSON.stringify(view.settings), secretSet: view.secretSet, storage: view.storage }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'restart_media_server',
+          description: 'Restart ZLMediaKit and wait until its API answers again. Use after changing ports in the plugin settings.',
+          parameters: {},
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                online: { type: 'boolean', required: true },
+                version: { type: 'string' },
+              },
+            },
+            render: (_args, value) => [{ type: 'text', text: value.online ? `ZLMediaKit restarted. version=${value.version ?? ''}` : 'ZLMediaKit did not restart.' }],
+          },
+          presentCall: () => ({ card: 'generic', kind: 'edit', title: 'Restart media server' }),
+          async execute(_args, exec) {
+            exec.signal.throwIfAborted()
+            const result = await restartServer()
+            exec.signal.throwIfAborted()
+            return { online: true, version: JSON.stringify(result.version ?? null) }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'call_zlm_api',
+          description: 'Call one ZLMediaKit HTTP API method directly, with the plugin secret already attached. '
+            + 'params is a JSON object of API parameters. Use this for ZLMediaKit capabilities the plugin does not wrap; prefer the specific tools when one exists.',
+          parameters: {
+            method: { type: 'string', required: true, description: 'ZLMediaKit API method name, such as getMediaList or getStatistic.' },
+            params: { type: 'string', description: 'JSON object of API parameters.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { result: { type: 'string', required: true } },
+            },
+            render: (_args, value) => [{ type: 'text', text: value.result }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'search', title: `Call ZLMediaKit ${args.method}` }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            let fields = {}
+            if (args.params !== undefined && args.params !== '') {
+              try {
+                fields = JSON.parse(String(args.params))
+              } catch (_invalidParams) {
+                throw new MediaError('invalid-input', 'params must be a JSON object', 400)
+              }
+              if (!isRecord(fields)) throw new MediaError('invalid-input', 'params must be a JSON object', 400)
+            }
+            const settings = liveSettings()
+            requireHost(settings)
+            const payload = await zlmCall(settings, requiredText(args.method, 'Method', 120), Object.fromEntries(
+              Object.entries(fields).map(([key, value]) => [key, String(value)]),
+            ))
+            exec.signal.throwIfAborted()
+            return { result: JSON.stringify(payload ?? null).slice(0, 20000) }
+          },
+        })),
+
+        child.tools.register(defineTool({
+          name: 'zlm_api',
+          description: 'Call one ZLMediaKit HTTP API method and return the full {code,msg,data} response. '
+            + 'The Host attaches the plugin secret. params is a JSON object of API parameters; a non-zero API code is returned instead of thrown. '
+            + 'Prefer the specific media tools when one covers the operation, and use this for everything else ZLMediaKit exposes.',
+          parameters: {
+            method: { type: 'string', required: true, description: 'ZLMediaKit API method name, such as getMediaList, getStatistic, or getServerConfig.' },
+            params: { type: 'json', description: 'JSON object of API parameters, for example {"app":"live","stream":"test"}.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { result: { type: 'json', required: true } },
+            },
+            render: (_args, value) => [{ type: 'text', text: JSON.stringify(value.result).slice(0, 20000) }],
+          },
+          presentCall: args => ({ card: 'generic', kind: 'search', title: `Call ZLMediaKit ${args.method}` }),
+          async execute(args, exec) {
+            exec.signal.throwIfAborted()
+            const settings = liveSettings()
+            requireHost(settings)
+            const payload = await zlmRequest(settings, requiredText(args.method, 'Method', 120), isRecord(args.params) ? args.params : {})
+            exec.signal.throwIfAborted()
+            return { result: payload }
+          },
+        })),
       ]
       return () => { for (const dispose of disposers) dispose() }
     }, 'dsh-media: tools')
   })
+
+  service.impl = {
+    tree: async () => sortedNodes(await catalog.tree()),
+    settings: settingsView,
+    updateSettings: async (patch) => {
+      const normalized = normalizeSettingsPatch(isRecord(patch) ? patch : {})
+      if (Object.keys(normalized).length > 0) await settingsService().update(ENTRY_ID, normalized)
+      return settingsView()
+    },
+    createFolder,
+    createStream,
+    updateNode,
+    deleteNode,
+    exportCanvas,
+    listExports,
+    stopExport: (nodeId) => { stopComposition(String(nodeId)) },
+    serverStatus,
+    applyServerConfig,
+    restartServer,
+    serverConfig: () => serverConfig(liveSettings()),
+    streamStatus,
+    prepareStream,
+    webrtcExchange,
+    listRecordings,
+    syncRecordings,
+    pruneRecordings,
+    record: recordStream,
+    callZlm: async (method, fields) => {
+      const settings = liveSettings()
+      requireHost(settings)
+      return zlmCall(settings, requiredText(method, 'Method', 120), isRecord(fields) ? fields : {})
+    },
+    zlm: async (method, fields) => {
+      const settings = liveSettings()
+      requireHost(settings)
+      return zlmRequest(settings, requiredText(method, 'Method', 120), isRecord(fields) ? fields : {})
+    },
+  }
 }

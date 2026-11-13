@@ -13,6 +13,7 @@ RUN apt-get update && \
         curl \
         tzdata \
         libssl3 \
+        libx264-163 \
         ffmpeg && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo "$TZ" > /etc/timezone && \
@@ -31,8 +32,11 @@ RUN if [ -s /tmp/zlm-linux/MediaServer ] && [ -s /tmp/zlm-linux/libjemalloc.so.2
         "${ZLM_RELEASE_BASE}/${ZLM_RELEASE}/MediaServer"; \
     fi && \
     chmod +x /opt/media/bin/MediaServer && \
-    ldconfig && \
-    rm -rf /tmp/zlm-linux
+    if [ -d /tmp/zlm-linux/extra-libs ]; then \
+      cp -a /tmp/zlm-linux/extra-libs/. /usr/local/lib/; \
+    fi && \
+    rm -rf /tmp/zlm-linux && \
+    ldconfig
 COPY default.pem ./
 COPY www ./www
 COPY config.ini /opt/media/conf/config.ini

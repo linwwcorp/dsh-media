@@ -1,2 +1,4 @@
 zlm/linux/MediaServer
 zlm/linux/libjemalloc.so.2
+zlm/linux/extra-libs/
+zlm/linux/data/
